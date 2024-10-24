@@ -1,0 +1,25 @@
+# -*- coding: utf-8 -*-
+
+[package]
+name = "feedsdb"
+description = "feedreader-rs database library"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+readme = { workspace = true }
+categories = { workspace = true }
+keywords = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+hex = { workspace = true }
+rusqlite = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = [ "rt", "macros" ] }
+
+# vim: ts=4 sw=4 expandtab

@@ -1,0 +1,21 @@
+[Unit]
+Description=feedsd service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/opt/feedreader/bin/feedsd
+ExecReload=/bin/kill -HUP $MAINPID
+WorkingDirectory=/usr/lib/cgi-bin
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=10
+User=www-data
+Group=www-data
+Nice=0
+
+[Install]
+WantedBy=multi-user.target

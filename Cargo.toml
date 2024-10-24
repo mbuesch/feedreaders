@@ -1,0 +1,51 @@
+# -*- coding: utf-8 -*-
+
+[workspace]
+members = [
+    "feeds",
+    "feedsd",
+    "feedsdb",
+]
+resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.75.0"
+license = "GPL-2.0-or-later"
+authors = [ "Michael Büsch <m@bues.ch>", "Marco Lochen" ]
+homepage = "https://bues.ch/"
+repository = "https://github.com/mbuesch/feedreaders"
+readme = "README.md"
+categories = [ ] #TODO
+keywords = [ ] #TODO
+
+[workspace.dependencies]
+anyhow = "1"
+chrono = "0.4"
+clap = { version = "4", default-features = false }
+feed-rs = "2"
+hex = "0.4"
+html-escape = "0.2"
+itertools = "0.13"
+multer = "3"
+querystrong = "0.3"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false }
+rusqlite = "0.32"
+sd-notify = "0.4"
+sha2 = "0.10"
+tokio = "1"
+
+feedsdb = { version = "1", path = "./feedsdb" }
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+panic = "abort"
+strip = "symbols"
+debug-assertions = false
+overflow-checks = true
+codegen-units = 1
+
+# vim: ts=4 sw=4 expandtab

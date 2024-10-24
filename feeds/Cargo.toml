@@ -1,0 +1,27 @@
+# -*- coding: utf-8 -*-
+
+[package]
+name = "feeds"
+description = "feedreader-rs CGI"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+readme = { workspace = true }
+categories = { workspace = true }
+keywords = { workspace = true }
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+feedsdb = { workspace = true }
+html-escape = { workspace = true }
+multer = { workspace = true, features = [ "tokio-io" ] }
+querystrong = { workspace = true }
+tokio = { workspace = true, features = [ "rt", "macros", "sync" ] }
+
+# vim: ts=4 sw=4 expandtab
