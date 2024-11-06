@@ -89,7 +89,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
                         let _ = exit_sock_tx.send(e).await;
                         break;
                     }
-                    eprintln!("ERROR: {e}");
+                    eprintln!("ERROR: {e:?}");
                 } else {
                     err_count = err_count.saturating_sub(1);
                 }
