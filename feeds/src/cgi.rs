@@ -151,13 +151,13 @@ impl Cgi {
         };
 
         match &self.meth[..] {
-            "GET" | "HEAD" => {
-                if self.meth == "HEAD" {
+            m @ "GET" | m @ "HEAD" => {
+                if m == "HEAD" {
                     match pagegen.get(&query, GetBody::No).await {
                         Ok(res) => response_200_ok(None, &res.mime, &[], self.start_stamp),
                         Err(e) => {
                             if DEBUG {
-                                response_500_internal_error(&format!("{e}"));
+                                response_500_internal_error(&format!("{e:?}"));
                             } else {
                                 response_500_internal_error("GET failed");
                             }
@@ -173,7 +173,7 @@ impl Cgi {
                         ),
                         Err(e) => {
                             if DEBUG {
-                                response_500_internal_error(&format!("{e}"));
+                                response_500_internal_error(&format!("{e:?}"));
                             } else {
                                 response_500_internal_error("GET failed");
                             }
@@ -212,15 +212,15 @@ impl Cgi {
                     }
                     Err(e) => {
                         if DEBUG {
-                            response_500_internal_error(&format!("{e}"));
+                            response_500_internal_error(&format!("{e:?}"));
                         } else {
                             response_500_internal_error("POST failed");
                         }
                     }
                 }
             }
-            meth => {
-                response_400_bad_request(&format!("Unsupported REQUEST_METHOD: '{meth}'"));
+            m => {
+                response_400_bad_request(&format!("Unsupported REQUEST_METHOD: '{m}'"));
             }
         }
     }
