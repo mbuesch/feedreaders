@@ -17,8 +17,8 @@ authors = [ "Michael Büsch <m@bues.ch>", "Marco Lochen" ]
 homepage = "https://bues.ch/"
 repository = "https://github.com/mbuesch/feedreaders"
 readme = "README.md"
-categories = [ ] #TODO
-keywords = [ ] #TODO
+categories = [ "network-programming", "text-processing", "visualization", "web-programming" ]
+keywords = [ "feed-reader", "rss", "atom" ]
 
 [workspace.dependencies]
 anyhow = "1"
