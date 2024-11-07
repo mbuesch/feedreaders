@@ -26,7 +26,7 @@ use crate::{refresh::refresh_feeds, systemd::systemd_notify_ready};
 use anyhow::{self as ah, format_err as err, Context as _};
 use clap::Parser;
 use feedsdb::{Db, DEBUG};
-use std::{num::NonZeroUsize, time::Duration};
+use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     runtime,
     signal::unix::{signal, SignalKind},
@@ -53,6 +53,7 @@ impl Opts {
     }
 }
 
+#[must_use]
 async fn do_refresh(db: &Db, opts: &Opts) -> (bool, Duration) {
     if DEBUG {
         eprintln!("Refreshing...");
@@ -72,6 +73,8 @@ async fn do_refresh(db: &Db, opts: &Opts) -> (bool, Duration) {
 }
 
 async fn async_main(opts: Opts) -> ah::Result<()> {
+    let opts = Arc::new(opts);
+
     // Register unix signal handlers.
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
     let mut sigint = signal(SignalKind::interrupt()).unwrap();
@@ -81,7 +84,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
     let (exit_sock_tx, mut exit_sock_rx) = sync::mpsc::channel(1);
 
     // Create the database access object.
-    let db = Db::new(&opts.db).await.context("Database")?;
+    let db = Arc::new(Db::new(&opts.db).await.context("Database")?);
     // Initialize the database, if not already done.
     db.open()
         .await
@@ -95,6 +98,9 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
 
     // Task: DB refresher.
     task::spawn({
+        let db = Arc::clone(&db);
+        let opts = Arc::clone(&opts);
+
         async move {
             let mut err_count = 0_u32;
             loop {
@@ -128,7 +134,8 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
                 break;
             }
             _ = sighup.recv() => {
-                //TODO trigger refresh
+                println!("SIGHUP: Triggering database refresh.");
+                let _ = do_refresh(&db, &opts).await;
             }
             code = exit_sock_rx.recv() => {
                 exitcode = code.unwrap_or_else(|| Err(err!("Unknown error code.")));
