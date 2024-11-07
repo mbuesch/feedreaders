@@ -81,7 +81,10 @@ async fn gen_feed_list(
         }
 
         let feed_id = feed.feed_id.expect("get_feeds() feed_id was None");
-        let title = escape(&feed.title, 32);
+        let mut title = escape(&feed.title, 32);
+        if feed.disabled {
+            title.push_str(" (DISABLED)");
+        }
 
         let updated_items = if feed.updated_items > 0 {
             format!(" ({})", feed.updated_items)
