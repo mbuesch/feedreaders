@@ -18,7 +18,7 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use crate::{formfields::FormFields, query::Query};
+use crate::{formfields::FormFields, query::Query, wakeup::wakeup_feedsd};
 use anyhow::{self as ah, Context as _};
 use feedsdb::{Db, DbConn};
 use std::{fmt::Write as _, write as wr, writeln as ln};
@@ -213,6 +213,8 @@ async fn gen_page(
     query: &Query,
     formfields: Option<&FormFields>,
 ) -> ah::Result<()> {
+    let mut wake_feedsd = false;
+
     ln!(b, r#"<!DOCTYPE HTML>"#)?;
     ln!(b, r#"<html lang="en">"#)?;
     ln!(b, r#"<head>"#)?;
@@ -227,7 +229,7 @@ async fn gen_page(
         if let Some(add_href) = formfields.get_one("add") {
             conn.add_feed(add_href).await
                 .context("Database: Add feed")?;
-            //TODO we should wake up feedsd
+            wake_feedsd = true;
         }
         if let Some(del_ids) = formfields.get_list_i64("del") {
             conn.delete_feeds(&del_ids).await
@@ -250,6 +252,11 @@ async fn gen_page(
 
     ln!(b, r#"</body>"#)?;
     ln!(b, r#"</html>"#)?;
+
+    if wake_feedsd {
+        wakeup_feedsd().await;
+    }
+
     Ok(())
 }
 

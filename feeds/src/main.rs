@@ -23,6 +23,7 @@ mod cgi;
 mod formfields;
 mod pagegen;
 mod query;
+mod wakeup;
 
 use crate::{cgi::Cgi, pagegen::PageGen};
 use anyhow::{self as ah, Context as _};

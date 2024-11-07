@@ -20,8 +20,9 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 feedsdb = { workspace = true }
 html-escape = { workspace = true }
+nix = { workspace = true, features = [ "signal" ] }
 multer = { workspace = true, features = [ "tokio-io" ] }
 querystrong = { workspace = true }
-tokio = { workspace = true, features = [ "rt", "macros", "sync" ] }
+tokio = { workspace = true, features = [ "rt", "macros", "sync", "fs" ] }
 
 # vim: ts=4 sw=4 expandtab
