@@ -416,10 +416,20 @@ impl DbConn {
                         ",
                     )?
                     .execute([feed_id])?;
-                    t.prepare_cached("DELETE FROM items WHERE feed_id = ?")?
-                        .execute([feed_id])?;
-                    t.prepare_cached("DELETE FROM feeds WHERE feed_id = ?")?
-                        .execute([feed_id])?;
+                    t.prepare_cached(
+                        "\
+                            DELETE FROM items \
+                            WHERE feed_id = ?\
+                        ",
+                    )?
+                    .execute([feed_id])?;
+                    t.prepare_cached(
+                        "\
+                            DELETE FROM feeds \
+                            WHERE feed_id = ?\
+                        ",
+                    )?
+                    .execute([feed_id])?;
                 }
 
                 t.commit()?;
@@ -476,12 +486,23 @@ impl DbConn {
     pub async fn get_feeds(&mut self, active_feed_id: Option<i64>) -> ah::Result<Vec<Feed>> {
         transaction(Arc::clone(&self.conn), move |t| {
             if let Some(active_feed_id) = active_feed_id {
-                t.prepare_cached("UPDATE feeds SET updated_items = 0 WHERE feed_id = ?")?
-                    .execute([active_feed_id])?;
+                t.prepare_cached(
+                    "\
+                        UPDATE feeds \
+                        SET updated_items = 0 \
+                        WHERE feed_id = ?\
+                    ",
+                )?
+                .execute([active_feed_id])?;
             }
 
             let feeds: Vec<Feed> = t
-                .prepare_cached("SELECT * FROM feeds ORDER BY last_activity DESC")?
+                .prepare_cached(
+                    "\
+                        SELECT * FROM feeds \
+                        ORDER BY last_activity DESC\
+                    ",
+                )?
                 .query_map([], Feed::from_sql_row)?
                 .map(|f| f.unwrap())
                 .collect();
@@ -514,8 +535,14 @@ impl DbConn {
                 .map(|i| i.unwrap())
                 .collect();
 
-            t.prepare_cached("UPDATE items SET seen = TRUE WHERE feed_id = ?")?
-                .execute([feed_id])?;
+            t.prepare_cached(
+                "\
+                    UPDATE items \
+                    SET seen = TRUE \
+                    WHERE feed_id = ?\
+                ",
+            )?
+            .execute([feed_id])?;
 
             t.commit()?;
             Ok(items)
@@ -546,8 +573,14 @@ impl DbConn {
                 .map(|i| i.unwrap())
                 .collect();
 
-            t.prepare_cached("UPDATE items SET seen = TRUE WHERE feed_id = ?")?
-                .execute([feed_id])?;
+            t.prepare_cached(
+                "\
+                    UPDATE items \
+                    SET seen = TRUE \
+                    WHERE feed_id = ?\
+                ",
+            )?
+            .execute([feed_id])?;
 
             t.commit()?;
             Ok(items)
@@ -561,7 +594,13 @@ impl DbConn {
 
             transaction(Arc::clone(&self.conn), move |t| {
                 let count: Vec<i64> = t
-                    .prepare_cached("SELECT count(item_id) FROM items WHERE item_id = ?")?
+                    .prepare_cached(
+                        "\
+                            SELECT count(item_id) \
+                            FROM items \
+                            WHERE item_id = ?\
+                        ",
+                    )?
                     .query_map([&item_id], |row| row.get(0))?
                     .map(|c| c.unwrap())
                     .collect();
