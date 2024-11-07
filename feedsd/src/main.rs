@@ -26,12 +26,24 @@ use crate::{refresh::refresh_feeds, systemd::systemd_notify_ready};
 use anyhow::{self as ah, format_err as err, Context as _};
 use clap::Parser;
 use feedsdb::{Db, DEBUG};
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
+use std::{fs::OpenOptions, io::Write as _, num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     runtime,
     signal::unix::{signal, SignalKind},
     sync, task,
 };
+
+/// Create the PID-file in the /run subdirectory.
+fn make_pidfile() -> ah::Result<()> {
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("/run/feedsd/feedsd.pid")
+        .context("Open PID-file")?
+        .write_all(format!("{}\n", std::process::id()).as_bytes())
+        .context("Write to PID-file")
+}
 
 #[derive(Parser, Debug, Clone)]
 struct Opts {
@@ -74,6 +86,9 @@ async fn do_refresh(db: &Db, opts: &Opts) -> (bool, Duration) {
 
 async fn async_main(opts: Opts) -> ah::Result<()> {
     let opts = Arc::new(opts);
+
+    // Create pid-file in /run.
+    make_pidfile()?;
 
     // Register unix signal handlers.
     let mut sigterm = signal(SignalKind::terminate()).unwrap();

@@ -227,6 +227,7 @@ async fn gen_page(
         if let Some(add_href) = formfields.get_one("add") {
             conn.add_feed(add_href).await
                 .context("Database: Add feed")?;
+            //TODO we should wake up feedsd
         }
         if let Some(del_ids) = formfields.get_list_i64("del") {
             conn.delete_feeds(&del_ids).await
