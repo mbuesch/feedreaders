@@ -61,7 +61,7 @@ pub struct Feed {
     pub last_retrieval: DateTime<Utc>,
     pub next_retrieval: DateTime<Utc>,
     pub last_activity: DateTime<Utc>,
-    pub disabled: bool, //TODO: Check this flag when updating
+    pub disabled: bool,
     pub updated_items: i64,
 }
 
@@ -139,6 +139,8 @@ pub async fn make_item_id(item: &Item, enclosures: &[Enclosure]) -> String {
     }
     hex::encode(h.finalize())
 }
+
+//TODO use cached statements
 
 async fn transaction<F, R>(conn: Arc<Mutex<Connection>>, mut f: F) -> ah::Result<R>
 where
@@ -433,7 +435,13 @@ impl DbConn {
 
         transaction(Arc::clone(&self.conn), move |t| {
             let feeds: Vec<Feed> = t
-                .prepare("SELECT * FROM feeds WHERE next_retrieval < ?")?
+                .prepare(
+                    "\
+                        SELECT * FROM feeds \
+                        WHERE next_retrieval < ? AND \
+                              disabled == FALSE\
+                    ",
+                )?
                 .query_map([dt_to_sql(&now)], Feed::from_sql_row)?
                 .map(|f| f.unwrap())
                 .collect();
@@ -447,7 +455,12 @@ impl DbConn {
     pub async fn get_next_due_time(&mut self) -> ah::Result<DateTime<Utc>> {
         transaction(Arc::clone(&self.conn), move |t| {
             let next_retrieval = t
-                .prepare("SELECT min(next_retrieval) FROM feeds")?
+                .prepare(
+                    "\
+                        SELECT min(next_retrieval) FROM feeds \
+                        WHERE disabled == FALSE\
+                    ",
+                )?
                 .query([])?
                 .next()?
                 .unwrap()
