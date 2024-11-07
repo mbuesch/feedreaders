@@ -140,8 +140,6 @@ pub async fn make_item_id(item: &Item, enclosures: &[Enclosure]) -> String {
     hex::encode(h.finalize())
 }
 
-//TODO use cached statements
-
 async fn transaction<F, R>(conn: Arc<Mutex<Connection>>, mut f: F) -> ah::Result<R>
 where
     F: FnMut(rusqlite::Transaction) -> Result<R, Error> + Send + 'static,
@@ -219,6 +217,7 @@ impl DbConn {
                     }
                 };
                 conn.busy_timeout(TIMEOUT)?;
+                conn.set_prepared_statement_cache_capacity(64);
                 break Ok(conn);
             }
         })
@@ -297,7 +296,7 @@ impl DbConn {
             let Some(feed_id) = feed.feed_id else {
                 return Err(Error::Ah(err!("update_feed(): Invalid feed. No feed_id.")));
             };
-            t.execute(
+            t.prepare_cached(
                 "\
                     UPDATE feeds SET \
                         href = ?,
@@ -309,17 +308,17 @@ impl DbConn {
                         updated_items = ?
                     WHERE feed_id = ?\
                 ",
-                (
-                    &feed.href,
-                    &feed.title,
-                    dt_to_sql(&feed.last_retrieval),
-                    dt_to_sql(&feed.next_retrieval),
-                    dt_to_sql(&feed.last_activity),
-                    feed.disabled,
-                    feed.updated_items,
-                    feed_id,
-                ),
-            )?;
+            )?
+            .execute((
+                &feed.href,
+                &feed.title,
+                dt_to_sql(&feed.last_retrieval),
+                dt_to_sql(&feed.next_retrieval),
+                dt_to_sql(&feed.last_activity),
+                feed.disabled,
+                feed.updated_items,
+                feed_id,
+            ))?;
 
             for (item, enclosures) in &items {
                 let Some(item_id) = &item.item_id else {
@@ -330,24 +329,24 @@ impl DbConn {
                         "update_feed(): Invalid item. Invalid feed_id."
                     )));
                 }
-                t.execute(
+                t.prepare_cached(
                     "\
                         INSERT INTO items \
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\
                     ",
-                    (
-                        item_id,
-                        feed_id,
-                        dt_to_sql(&item.retrieved),
-                        item.seen,
-                        &item.author,
-                        &item.title,
-                        &item.feed_item_id,
-                        &item.link,
-                        dt_to_sql(&item.published),
-                        &item.summary,
-                    ),
-                )?;
+                )?
+                .execute((
+                    item_id,
+                    feed_id,
+                    dt_to_sql(&item.retrieved),
+                    item.seen,
+                    &item.author,
+                    &item.title,
+                    &item.feed_item_id,
+                    &item.link,
+                    dt_to_sql(&item.published),
+                    &item.summary,
+                ))?;
 
                 for enclosure in enclosures {
                     if enclosure.item_id.is_some() && enclosure.item_id.as_ref() != Some(item_id) {
@@ -355,19 +354,19 @@ impl DbConn {
                             "update_feed(): Invalid enclosure. Invalid item_id."
                         )));
                     }
-                    t.execute(
+                    t.prepare_cached(
                         "\
                             INSERT INTO enclosures
                             VALUES (?, ?, ?, ?, ?)
                         ",
-                        (
-                            None::<i64>,
-                            item_id,
-                            &enclosure.href,
-                            enclosure.length,
-                            &enclosure.type_,
-                        ),
-                    )?;
+                    )?
+                    .execute((
+                        None::<i64>,
+                        item_id,
+                        &enclosure.href,
+                        enclosure.length,
+                        &enclosure.type_,
+                    ))?;
                 }
             }
 
@@ -381,22 +380,22 @@ impl DbConn {
         let href = href.to_string();
 
         transaction(Arc::clone(&self.conn), move |t| {
-            t.execute(
+            t.prepare_cached(
                 "\
                     INSERT INTO feeds \
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)\
                 ",
-                (
-                    None::<i64>,
-                    &href,
-                    "[New feed] Updating...",
-                    0,
-                    0,
-                    0,
-                    false,
-                    0,
-                ),
-            )?;
+            )?
+            .execute((
+                None::<i64>,
+                &href,
+                "[New feed] Updating...",
+                0,
+                0,
+                0,
+                false,
+                0,
+            ))?;
 
             t.commit()?;
             Ok(())
@@ -410,15 +409,17 @@ impl DbConn {
 
             transaction(Arc::clone(&self.conn), move |t| {
                 for feed_id in &feed_ids {
-                    t.execute(
+                    t.prepare_cached(
                         "\
                             DELETE FROM enclosures WHERE item_id IN \
                             (SELECT item_id FROM items WHERE feed_id = ?)\
                         ",
-                        [feed_id],
-                    )?;
-                    t.execute("DELETE FROM items WHERE feed_id = ?", [feed_id])?;
-                    t.execute("DELETE FROM feeds WHERE feed_id = ?", [feed_id])?;
+                    )?
+                    .execute([feed_id])?;
+                    t.prepare_cached("DELETE FROM items WHERE feed_id = ?")?
+                        .execute([feed_id])?;
+                    t.prepare_cached("DELETE FROM feeds WHERE feed_id = ?")?
+                        .execute([feed_id])?;
                 }
 
                 t.commit()?;
@@ -435,7 +436,7 @@ impl DbConn {
 
         transaction(Arc::clone(&self.conn), move |t| {
             let feeds: Vec<Feed> = t
-                .prepare(
+                .prepare_cached(
                     "\
                         SELECT * FROM feeds \
                         WHERE next_retrieval < ? AND \
@@ -455,7 +456,7 @@ impl DbConn {
     pub async fn get_next_due_time(&mut self) -> ah::Result<DateTime<Utc>> {
         transaction(Arc::clone(&self.conn), move |t| {
             let next_retrieval = t
-                .prepare(
+                .prepare_cached(
                     "\
                         SELECT min(next_retrieval) FROM feeds \
                         WHERE disabled == FALSE\
@@ -475,14 +476,12 @@ impl DbConn {
     pub async fn get_feeds(&mut self, active_feed_id: Option<i64>) -> ah::Result<Vec<Feed>> {
         transaction(Arc::clone(&self.conn), move |t| {
             if let Some(active_feed_id) = active_feed_id {
-                t.execute(
-                    "UPDATE feeds SET updated_items = 0 WHERE feed_id = ?",
-                    [active_feed_id],
-                )?;
+                t.prepare_cached("UPDATE feeds SET updated_items = 0 WHERE feed_id = ?")?
+                    .execute([active_feed_id])?;
             }
 
             let feeds: Vec<Feed> = t
-                .prepare("SELECT * FROM feeds ORDER BY last_activity DESC")?
+                .prepare_cached("SELECT * FROM feeds ORDER BY last_activity DESC")?
                 .query_map([], Feed::from_sql_row)?
                 .map(|f| f.unwrap())
                 .collect();
@@ -500,7 +499,7 @@ impl DbConn {
     pub async fn get_feed_items(&mut self, feed_id: i64) -> ah::Result<Vec<(Item, i64)>> {
         transaction(Arc::clone(&self.conn), move |t| {
             let items: Vec<(Item, i64)> = t
-                .prepare(
+                .prepare_cached(
                     "\
                         SELECT item_id, feed_id, max(retrieved), seen, \
                         author, title, feed_item_id, link, published, \
@@ -515,7 +514,8 @@ impl DbConn {
                 .map(|i| i.unwrap())
                 .collect();
 
-            t.execute("UPDATE items SET seen = TRUE WHERE feed_id = ?", [feed_id])?;
+            t.prepare_cached("UPDATE items SET seen = TRUE WHERE feed_id = ?")?
+                .execute([feed_id])?;
 
             t.commit()?;
             Ok(items)
@@ -532,7 +532,7 @@ impl DbConn {
 
         transaction(Arc::clone(&self.conn), move |t| {
             let items: Vec<Item> = t
-                .prepare(
+                .prepare_cached(
                     "\
                         SELECT * FROM items \
                         WHERE feed_id = ? AND feed_item_id IN (\
@@ -546,7 +546,8 @@ impl DbConn {
                 .map(|i| i.unwrap())
                 .collect();
 
-            t.execute("UPDATE items SET seen = TRUE WHERE feed_id = ?", [feed_id])?;
+            t.prepare_cached("UPDATE items SET seen = TRUE WHERE feed_id = ?")?
+                .execute([feed_id])?;
 
             t.commit()?;
             Ok(items)
@@ -560,7 +561,7 @@ impl DbConn {
 
             transaction(Arc::clone(&self.conn), move |t| {
                 let count: Vec<i64> = t
-                    .prepare("SELECT count(item_id) FROM items WHERE item_id = ?")?
+                    .prepare_cached("SELECT count(item_id) FROM items WHERE item_id = ?")?
                     .query_map([&item_id], |row| row.get(0))?
                     .map(|c| c.unwrap())
                     .collect();
