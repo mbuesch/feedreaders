@@ -20,6 +20,9 @@
 
 #![forbid(unsafe_code)]
 
+mod error;
+
+use crate::error::Error;
 use anyhow::{self as ah, format_err as err, Context as _};
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OpenFlags, Row};
@@ -135,35 +138,6 @@ pub async fn make_item_id(item: &Item, enclosures: &[Enclosure]) -> String {
         h.update(&enclosure.type_);
     }
     hex::encode(h.finalize())
-}
-
-#[derive(Debug)]
-enum Error {
-    Ah(ah::Error),
-    Sql(rusqlite::Error),
-}
-
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Ah(e) => write!(f, "{e}"),
-            Self::Sql(e) => write!(f, "{e}"),
-        }
-    }
-}
-
-impl From<rusqlite::Error> for Error {
-    fn from(e: rusqlite::Error) -> Self {
-        Self::Sql(e)
-    }
-}
-
-impl From<ah::Error> for Error {
-    fn from(e: ah::Error) -> Self {
-        Self::Ah(e)
-    }
 }
 
 async fn transaction<F, R>(conn: Arc<Mutex<Connection>>, mut f: F) -> ah::Result<R>
