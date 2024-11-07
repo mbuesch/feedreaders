@@ -30,7 +30,7 @@ use std::{num::NonZeroUsize, time::Duration};
 use tokio::{
     runtime,
     signal::unix::{signal, SignalKind},
-    sync, task, time,
+    sync, task,
 };
 
 #[derive(Parser, Debug, Clone)]
@@ -43,13 +43,31 @@ struct Opts {
     worker_threads: NonZeroUsize,
 
     /// Feed refresh interval, in seconds.
-    #[arg(long, default_value = "60")]
+    #[arg(long, default_value = "600")]
     refresh_interval: u64,
 }
 
 impl Opts {
     pub fn refresh_interval(&self) -> Duration {
         Duration::from_secs(self.refresh_interval)
+    }
+}
+
+async fn do_refresh(db: &Db, opts: &Opts) -> (bool, Duration) {
+    if DEBUG {
+        eprintln!("Refreshing...");
+    }
+    match refresh_feeds(db, opts.refresh_interval()).await {
+        Err(e) => {
+            eprintln!("ERROR: {e:?}");
+            (false, Duration::from_secs(60))
+        }
+        Ok(sleep_dur) => {
+            if DEBUG {
+                eprintln!("Refreshed. Sleeping {sleep_dur:?}.");
+            }
+            (true, sleep_dur)
+        }
     }
 }
 
@@ -78,37 +96,20 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
     // Task: DB refresher.
     task::spawn({
         async move {
-            if DEBUG {
-                eprintln!("Refreshing...");
-            }
-            if let Err(e) = refresh_feeds(&db, opts.refresh_interval()).await {
-                eprintln!("ERROR: {e:?}");
-            } else if DEBUG {
-                eprintln!("Refreshed.");
-            }
-
-            let mut interval = time::interval(opts.refresh_interval() / 10); //TODO
-            interval.reset();
             let mut err_count = 0_u32;
             loop {
-                interval.tick().await;
-                if DEBUG {
-                    eprintln!("Refreshing...");
-                }
-                if let Err(e) = refresh_feeds(&db, opts.refresh_interval()).await {
+                let (ok, sleep_dur) = do_refresh(&db, &opts).await;
+                if ok {
+                    err_count = err_count.saturating_sub(1);
+                } else {
                     err_count = err_count.saturating_add(3);
                     if err_count >= 9 {
                         let e = Err(err!("Too many errors. Bailing to systemd."));
                         let _ = exit_sock_tx.send(e).await;
                         break;
                     }
-                    eprintln!("ERROR: {e:?}");
-                } else {
-                    err_count = err_count.saturating_sub(1);
-                    if DEBUG {
-                        eprintln!("Refreshed.");
-                    }
                 }
+                tokio::time::sleep(sleep_dur).await;
             }
         }
     });

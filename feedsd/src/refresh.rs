@@ -21,7 +21,7 @@
 use anyhow::{self as ah, format_err as err, Context as _};
 use chrono::{DateTime, Utc};
 use feed_rs::model::{Entry as ParsedEntry, Feed as ParsedFeed};
-use feedsdb::{make_item_id, Db, DbConn, Enclosure, Item};
+use feedsdb::{make_item_id, Db, DbConn, Enclosure, Item, DEBUG};
 use rand::{thread_rng, Rng as _};
 use std::time::Duration;
 use tokio::task;
@@ -185,10 +185,16 @@ async fn get_items(
     Ok(items)
 }
 
-pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<()> {
+pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Duration> {
     let mut conn = db.open().await.context("Open database")?;
 
+    let now = Utc::now();
+    let next_retrieval = now + rand_interval(refresh_interval, REFRESH_SLACK);
+
     for mut feed in conn.get_feeds_due().await.context("Get feeds due")? {
+        if DEBUG {
+            println!("Refreshing {} ...", feed.title);
+        }
         let parsed_feed = match get_feed(&feed.href).await? {
             FeedResult::Feed(f) => f,
             FeedResult::MovedPermanently(location) => {
@@ -207,15 +213,13 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<()
             }
         };
 
-        let now = Utc::now();
-
         let items = get_items(&mut conn, &parsed_feed, now).await?;
 
         if let Some(title) = parsed_feed.title.as_ref() {
             feed.title = title.content.clone();
         }
         feed.last_retrieval = now;
-        feed.next_retrieval = now + rand_interval(refresh_interval, REFRESH_SLACK);
+        feed.next_retrieval = next_retrieval;
 
         if !items.is_empty() {
             feed.last_activity = now;
@@ -226,7 +230,14 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<()
             .await
             .context("Update feed")?;
     }
-    Ok(())
+
+    let next_due = conn.get_next_due_time().await.context("Update feed")?;
+    let now = Utc::now();
+    let dur = (next_due - now).num_milliseconds().max(0);
+    let sleep_dur = Duration::from_millis(dur.try_into().unwrap());
+    let sleep_dur = sleep_dur + Duration::from_secs(1);
+
+    Ok(sleep_dur)
 }
 
 // vim: ts=4 sw=4 expandtab

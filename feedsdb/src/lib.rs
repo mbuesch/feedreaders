@@ -434,12 +434,27 @@ impl DbConn {
         transaction(Arc::clone(&self.conn), move |t| {
             let feeds: Vec<Feed> = t
                 .prepare("SELECT * FROM feeds WHERE next_retrieval < ?")?
-                .query_map([now.timestamp()], Feed::from_sql_row)?
+                .query_map([dt_to_sql(&now)], Feed::from_sql_row)?
                 .map(|f| f.unwrap())
                 .collect();
 
             t.finish()?;
             Ok(feeds)
+        })
+        .await
+    }
+
+    pub async fn get_next_due_time(&mut self) -> ah::Result<DateTime<Utc>> {
+        transaction(Arc::clone(&self.conn), move |t| {
+            let next_retrieval = t
+                .prepare("SELECT min(next_retrieval) FROM feeds")?
+                .query([])?
+                .next()?
+                .unwrap()
+                .get(0)?;
+
+            t.finish()?;
+            Ok(sql_to_dt(next_retrieval))
         })
         .await
     }
