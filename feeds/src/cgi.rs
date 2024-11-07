@@ -23,14 +23,13 @@ use crate::{
     query::Query,
 };
 use anyhow::{self as ah, format_err as err};
+use feedsdb::DEBUG;
 use std::{
     env,
     ffi::OsString,
     io::{self, Read as _, Stdout, Write as _},
     time::Instant,
 };
-
-const DEBUG: bool = true;
 
 const MAX_CGIENV_LEN: usize = 1024 * 4;
 const MAX_CGIENV_U32_LEN: usize = 10;

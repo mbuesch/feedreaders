@@ -25,7 +25,7 @@ mod systemd;
 use crate::{refresh::refresh_feeds, systemd::systemd_notify_ready};
 use anyhow::{self as ah, format_err as err, Context as _};
 use clap::Parser;
-use feedsdb::Db;
+use feedsdb::{Db, DEBUG};
 use std::{num::NonZeroUsize, time::Duration};
 use tokio::{
     runtime,
@@ -35,7 +35,7 @@ use tokio::{
 
 #[derive(Parser, Debug, Clone)]
 struct Opts {
-    #[arg(long, default_value = "feedreader")]
+    #[arg(long, default_value = "feeds")]
     db: String,
 
     /// Set the number async worker threads.
@@ -78,10 +78,23 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
     // Task: DB refresher.
     task::spawn({
         async move {
+            if DEBUG {
+                eprintln!("Refreshing...");
+            }
+            if let Err(e) = refresh_feeds(&db, opts.refresh_interval()).await {
+                eprintln!("ERROR: {e:?}");
+            } else if DEBUG {
+                eprintln!("Refreshed.");
+            }
+
             let mut interval = time::interval(opts.refresh_interval() / 10); //TODO
+            interval.reset();
             let mut err_count = 0_u32;
             loop {
                 interval.tick().await;
+                if DEBUG {
+                    eprintln!("Refreshing...");
+                }
                 if let Err(e) = refresh_feeds(&db, opts.refresh_interval()).await {
                     err_count = err_count.saturating_add(3);
                     if err_count >= 9 {
@@ -92,6 +105,9 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
                     eprintln!("ERROR: {e:?}");
                 } else {
                     err_count = err_count.saturating_sub(1);
+                    if DEBUG {
+                        eprintln!("Refreshed.");
+                    }
                 }
             }
         }

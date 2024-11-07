@@ -24,7 +24,15 @@ use anyhow::{self as ah, format_err as err, Context as _};
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OpenFlags, Row};
 use sha2::{Digest as _, Sha256};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tokio::task::spawn_blocking;
+
+pub const DEBUG: bool = true;
+const TIMEOUT: Duration = Duration::from_millis(10_000);
 
 pub fn get_prefix() -> PathBuf {
     option_env!("FEEDREADER_PREFIX").unwrap_or("/").into()
@@ -42,6 +50,7 @@ fn dt_to_sql(dt: &DateTime<Utc>) -> i64 {
     dt.timestamp()
 }
 
+#[derive(Clone, Debug)]
 pub struct Feed {
     pub feed_id: Option<i64>,
     pub href: String,
@@ -68,6 +77,7 @@ impl Feed {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Item {
     pub item_id: Option<String>,
     pub feed_id: Option<i64>,
@@ -102,6 +112,7 @@ impl Item {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Enclosure {
     pub enclosure_id: Option<i64>,
     pub item_id: Option<String>,
@@ -126,75 +137,176 @@ pub async fn make_item_id(item: &Item, enclosures: &[Enclosure]) -> String {
     hex::encode(h.finalize())
 }
 
+#[derive(Debug)]
+enum Error {
+    Ah(ah::Error),
+    Sql(rusqlite::Error),
+}
+
+impl std::error::Error for Error {}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Ah(e) => write!(f, "{e}"),
+            Self::Sql(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl From<rusqlite::Error> for Error {
+    fn from(e: rusqlite::Error) -> Self {
+        Self::Sql(e)
+    }
+}
+
+impl From<ah::Error> for Error {
+    fn from(e: ah::Error) -> Self {
+        Self::Ah(e)
+    }
+}
+
+async fn transaction<F, R>(conn: Arc<Mutex<Connection>>, mut f: F) -> ah::Result<R>
+where
+    F: FnMut(rusqlite::Transaction) -> Result<R, Error> + Send + 'static,
+    R: Send + 'static,
+{
+    spawn_blocking(move || {
+        let timeout = Instant::now() + TIMEOUT;
+        loop {
+            let mut conn = conn.lock().expect("Mutex poisoned");
+            let trans = conn.transaction()?;
+            match f(trans) {
+                Ok(r) => {
+                    break Ok(r);
+                }
+                Err(Error::Sql(
+                    e @ rusqlite::Error::SqliteFailure(
+                        rusqlite::ffi::Error {
+                            code: rusqlite::ffi::ErrorCode::DatabaseBusy,
+                            ..
+                        },
+                        ..,
+                    ),
+                )) => {
+                    drop(conn); // unlock
+                    if Instant::now() >= timeout {
+                        break Err(e.into());
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(e) => {
+                    break Err(e.into());
+                }
+            }
+        }
+    })
+    .await?
+}
+
 pub struct DbConn {
-    conn: Connection,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl DbConn {
     async fn new(path: &Path) -> ah::Result<Self> {
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_WRITE
-                | OpenFlags::SQLITE_OPEN_CREATE
-                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
+        let path = path.to_path_buf();
+
+        let conn = spawn_blocking(move || -> ah::Result<Connection> {
+            let timeout = Instant::now() + TIMEOUT;
+
+            loop {
+                let conn = match Connection::open_with_flags(
+                    &path,
+                    OpenFlags::SQLITE_OPEN_READ_WRITE
+                        | OpenFlags::SQLITE_OPEN_CREATE
+                        | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                ) {
+                    Ok(conn) => conn,
+                    Err(
+                        e @ rusqlite::Error::SqliteFailure(
+                            rusqlite::ffi::Error {
+                                code: rusqlite::ffi::ErrorCode::DatabaseBusy,
+                                ..
+                            },
+                            ..,
+                        ),
+                    ) => {
+                        if Instant::now() >= timeout {
+                            break Err(e.into());
+                        }
+                        std::thread::sleep(Duration::from_millis(20));
+                        continue;
+                    }
+                    Err(e) => {
+                        break Err(e.into());
+                    }
+                };
+                conn.busy_timeout(TIMEOUT)?;
+                break Ok(conn);
+            }
+        })
+        .await?
         .context("Open SQLite database")?;
-        Ok(Self { conn })
+
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 
     #[rustfmt::skip]
     pub async fn init(&mut self) -> ah::Result<()> {
-        let t = self.conn.transaction()?;
+        transaction(Arc::clone(&self.conn), move |t| {
+            t.execute(
+                "\
+                    CREATE TABLE IF NOT EXISTS feeds (\
+                        feed_id INTEGER PRIMARY KEY, \
+                        href VARCHAR, \
+                        title VARCHAR, \
+                        last_retrieval TIMESTAMP, \
+                        next_retrieval TIMESTAMP, \
+                        last_activity TIMESTAMP, \
+                        disabled BOOLEAN, \
+                        updated_items INTEGER\
+                    )",
+                [],
+            )?;
+            t.execute(
+                "\
+                    CREATE TABLE IF NOT EXISTS items (\
+                        item_id VARCHAR PRIMARY KEY, \
+                        feed_id INTEGER, \
+                        retrieved TIMESTAMP, \
+                        seen BOOLEAN, \
+                        author VARCHAR, \
+                        title VARCHAR, \
+                        feed_item_id VARCHAR, \
+                        link VARCHAR, \
+                        published TIMESTAMP, \
+                        summary VARCHAR, \
+                        FOREIGN KEY(feed_id) REFERENCES feeds(feed_id)\
+                    )",
+                [],
+            )?;
+            t.execute(
+                "\
+                    CREATE TABLE IF NOT EXISTS enclosures (\
+                        enclosure_id INTEGER PRIMARY KEY, \
+                        item_id VARCHAR, \
+                        href VARCHAR, \
+                        length INTEGER, \
+                        type VARCHAR, \
+                        FOREIGN KEY(item_id) REFERENCES items(item_id)\
+                    )",
+                [],
+            )?;
+            t.execute("CREATE INDEX IF NOT EXISTS feed_id ON feeds(feed_id)", [])?;
+            t.execute("CREATE INDEX IF NOT EXISTS item_id ON items(item_id)", [])?;
+            t.execute("CREATE INDEX IF NOT EXISTS enclosure_id ON enclosures(enclosure_id)", [])?;
 
-        t.execute(
-            "\
-                CREATE TABLE IF NOT EXISTS feeds (\
-                    feed_id INTEGER PRIMARY KEY, \
-                    href VARCHAR, \
-                    title VARCHAR, \
-                    last_retrieval TIMESTAMP, \
-                    next_retrieval TIMESTAMP, \
-                    last_activity TIMESTAMP, \
-                    disabled BOOLEAN, \
-                    updated_items INTEGER\
-                )",
-            [],
-        )?;
-        t.execute(
-            "\
-                CREATE TABLE IF NOT EXISTS items (\
-                    item_id VARCHAR PRIMARY KEY, \
-                    feed_id INTEGER, \
-                    retrieved TIMESTAMP, \
-                    seen BOOLEAN, \
-                    author VARCHAR, \
-                    title VARCHAR, \
-                    feed_item_id VARCHAR, \
-                    link VARCHAR, \
-                    published TIMESTAMP, \
-                    summary VARCHAR, \
-                    FOREIGN KEY(feed_id) REFERENCES feeds(feed_id)\
-                )",
-            [],
-        )?;
-        t.execute(
-            "\
-                CREATE TABLE IF NOT EXISTS enclosures (\
-                    enclosure_id INTEGER PRIMARY KEY, \
-                    item_id VARCHAR, \
-                    href VARCHAR, \
-                    length INTEGER, \
-                    type VARCHAR, \
-                    FOREIGN KEY(item_id) REFERENCES items(item_id)\
-                )",
-            [],
-        )?;
-        t.execute("CREATE INDEX IF NOT EXISTS feed_id ON feeds(feed_id)", [])?;
-        t.execute("CREATE INDEX IF NOT EXISTS item_id ON items(item_id)", [])?;
-        t.execute("CREATE INDEX IF NOT EXISTS enclosure_id ON enclosures(enclosure_id)", [])?;
-
-        t.commit()?;
-        Ok(())
+            t.commit()?;
+            Ok(())
+        }).await
     }
 
     pub async fn update_feed(
@@ -202,191 +314,211 @@ impl DbConn {
         feed: &Feed,
         items: &[(Item, Vec<Enclosure>)],
     ) -> ah::Result<()> {
-        let t = self.conn.transaction()?;
+        let feed = feed.clone();
+        let items = items.to_vec();
 
-        let Some(feed_id) = feed.feed_id else {
-            return Err(err!("update_feed(): Invalid feed. No feed_id."));
-        };
-        t.execute(
-            "\
-                UPDATE feeds SET \
-                    href = ?,
-                    title = ?,
-                    last_retrieval = ?,
-                    next_retrieval = ?,
-                    last_activity = ?,
-                    disabled = ?,
-                    updated_items = ?
-                WHERE feed_id = ?\
-            ",
-            (
-                &feed.href,
-                &feed.title,
-                dt_to_sql(&feed.last_retrieval),
-                dt_to_sql(&feed.next_retrieval),
-                dt_to_sql(&feed.last_activity),
-                feed.disabled,
-                feed.updated_items,
-                feed_id,
-            ),
-        )?;
-
-        for (item, enclosures) in items {
-            let Some(item_id) = &item.item_id else {
-                return Err(err!("update_feed(): Invalid item. No item_id."));
+        transaction(Arc::clone(&self.conn), move |t| {
+            let Some(feed_id) = feed.feed_id else {
+                return Err(Error::Ah(err!("update_feed(): Invalid feed. No feed_id.")));
             };
-            if item.feed_id.is_some() && item.feed_id != Some(feed_id) {
-                return Err(err!("update_feed(): Invalid item. Invalid feed_id."));
-            }
             t.execute(
                 "\
-                    INSERT INTO items \
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\
+                    UPDATE feeds SET \
+                        href = ?,
+                        title = ?,
+                        last_retrieval = ?,
+                        next_retrieval = ?,
+                        last_activity = ?,
+                        disabled = ?,
+                        updated_items = ?
+                    WHERE feed_id = ?\
                 ",
                 (
-                    item_id,
+                    &feed.href,
+                    &feed.title,
+                    dt_to_sql(&feed.last_retrieval),
+                    dt_to_sql(&feed.next_retrieval),
+                    dt_to_sql(&feed.last_activity),
+                    feed.disabled,
+                    feed.updated_items,
                     feed_id,
-                    dt_to_sql(&item.retrieved),
-                    item.seen,
-                    &item.author,
-                    &item.title,
-                    &item.feed_item_id,
-                    &item.link,
-                    dt_to_sql(&item.published),
-                    &item.summary,
                 ),
             )?;
 
-            for enclosure in enclosures {
-                if enclosure.item_id.is_some() && enclosure.item_id.as_ref() != Some(item_id) {
-                    return Err(err!("update_feed(): Invalid enclosure. Invalid item_id."));
+            for (item, enclosures) in &items {
+                let Some(item_id) = &item.item_id else {
+                    return Err(Error::Ah(err!("update_feed(): Invalid item. No item_id.")));
+                };
+                if item.feed_id.is_some() && item.feed_id != Some(feed_id) {
+                    return Err(Error::Ah(err!(
+                        "update_feed(): Invalid item. Invalid feed_id."
+                    )));
                 }
                 t.execute(
                     "\
-                        INSERT INTO enclosures
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO items \
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\
                     ",
                     (
-                        None::<i64>,
                         item_id,
-                        &enclosure.href,
-                        enclosure.length,
-                        &enclosure.type_,
+                        feed_id,
+                        dt_to_sql(&item.retrieved),
+                        item.seen,
+                        &item.author,
+                        &item.title,
+                        &item.feed_item_id,
+                        &item.link,
+                        dt_to_sql(&item.published),
+                        &item.summary,
                     ),
                 )?;
-            }
-        }
 
-        t.commit()?;
-        Ok(())
+                for enclosure in enclosures {
+                    if enclosure.item_id.is_some() && enclosure.item_id.as_ref() != Some(item_id) {
+                        return Err(Error::Ah(err!(
+                            "update_feed(): Invalid enclosure. Invalid item_id."
+                        )));
+                    }
+                    t.execute(
+                        "\
+                            INSERT INTO enclosures
+                            VALUES (?, ?, ?, ?, ?)
+                        ",
+                        (
+                            None::<i64>,
+                            item_id,
+                            &enclosure.href,
+                            enclosure.length,
+                            &enclosure.type_,
+                        ),
+                    )?;
+                }
+            }
+
+            t.commit()?;
+            Ok(())
+        })
+        .await
     }
 
     pub async fn add_feed(&mut self, href: &str) -> ah::Result<()> {
-        let t = self.conn.transaction()?;
+        let href = href.to_string();
 
-        t.execute(
-            "\
-                INSERT INTO feeds \
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)\
-            ",
-            (
-                None::<i64>,
-                href,
-                "[New feed] Updating...",
-                0,
-                0,
-                0,
-                false,
-                0,
-            ),
-        )?;
+        transaction(Arc::clone(&self.conn), move |t| {
+            t.execute(
+                "\
+                    INSERT INTO feeds \
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)\
+                ",
+                (
+                    None::<i64>,
+                    &href,
+                    "[New feed] Updating...",
+                    0,
+                    0,
+                    0,
+                    false,
+                    0,
+                ),
+            )?;
 
-        t.commit()?;
-        Ok(())
+            t.commit()?;
+            Ok(())
+        })
+        .await
     }
 
     pub async fn delete_feeds(&mut self, feed_ids: &[i64]) -> ah::Result<()> {
         if !feed_ids.is_empty() {
-            let t = self.conn.transaction()?;
+            let feed_ids = feed_ids.to_vec();
 
-            for feed_id in feed_ids {
-                t.execute(
-                    "\
-                        DELETE FROM enclosures WHERE item_id IN \
-                        (SELECT item_id FROM items WHERE feed_id = ?)\
-                    ",
-                    [feed_id],
-                )?;
-                t.execute("DELETE FROM items WHERE feed_id = ?", [feed_id])?;
-                t.execute("DELETE FROM feeds WHERE feed_id = ?", [feed_id])?;
-            }
+            transaction(Arc::clone(&self.conn), move |t| {
+                for feed_id in &feed_ids {
+                    t.execute(
+                        "\
+                            DELETE FROM enclosures WHERE item_id IN \
+                            (SELECT item_id FROM items WHERE feed_id = ?)\
+                        ",
+                        [feed_id],
+                    )?;
+                    t.execute("DELETE FROM items WHERE feed_id = ?", [feed_id])?;
+                    t.execute("DELETE FROM feeds WHERE feed_id = ?", [feed_id])?;
+                }
 
-            t.commit()?;
+                t.commit()?;
+                Ok(())
+            })
+            .await
+        } else {
+            Ok(())
         }
-        Ok(())
     }
 
     pub async fn get_feeds_due(&mut self) -> ah::Result<Vec<Feed>> {
         let now = Utc::now();
-        let t = self.conn.transaction()?;
 
-        let feeds: Vec<Feed> = t
-            .prepare("SELECT * FROM feeds WHERE next_retrieval < ?")?
-            .query_map([now.timestamp()], Feed::from_sql_row)?
-            .map(|f| f.unwrap())
-            .collect();
+        transaction(Arc::clone(&self.conn), move |t| {
+            let feeds: Vec<Feed> = t
+                .prepare("SELECT * FROM feeds WHERE next_retrieval < ?")?
+                .query_map([now.timestamp()], Feed::from_sql_row)?
+                .map(|f| f.unwrap())
+                .collect();
 
-        t.finish()?;
-        Ok(feeds)
+            t.finish()?;
+            Ok(feeds)
+        })
+        .await
     }
 
     pub async fn get_feeds(&mut self, active_feed_id: Option<i64>) -> ah::Result<Vec<Feed>> {
-        let t = self.conn.transaction()?;
+        transaction(Arc::clone(&self.conn), move |t| {
+            if let Some(active_feed_id) = active_feed_id {
+                t.execute(
+                    "UPDATE feeds SET updated_items = 0 WHERE feed_id = ?",
+                    [active_feed_id],
+                )?;
+            }
 
-        if let Some(active_feed_id) = active_feed_id {
-            t.execute(
-                "UPDATE feeds SET updated_items = 0 WHERE feed_id = ?",
-                [active_feed_id],
-            )?;
-        }
+            let feeds: Vec<Feed> = t
+                .prepare("SELECT * FROM feeds ORDER BY last_activity DESC")?
+                .query_map([], Feed::from_sql_row)?
+                .map(|f| f.unwrap())
+                .collect();
 
-        let feeds: Vec<Feed> = t
-            .prepare("SELECT * FROM feeds ORDER BY last_activity DESC")?
-            .query_map([], Feed::from_sql_row)?
-            .map(|f| f.unwrap())
-            .collect();
-
-        if active_feed_id.is_some() {
-            t.commit()?;
-        } else {
-            t.finish()?;
-        }
-        Ok(feeds)
+            if active_feed_id.is_some() {
+                t.commit()?;
+            } else {
+                t.finish()?;
+            }
+            Ok(feeds)
+        })
+        .await
     }
 
     pub async fn get_feed_items(&mut self, feed_id: i64) -> ah::Result<Vec<(Item, i64)>> {
-        let t = self.conn.transaction()?;
+        transaction(Arc::clone(&self.conn), move |t| {
+            let items: Vec<(Item, i64)> = t
+                .prepare(
+                    "\
+                        SELECT item_id, feed_id, max(retrieved), seen, \
+                        author, title, feed_item_id, link, published, \
+                        summary, count() as count \
+                        FROM items \
+                        WHERE feed_id = ? \
+                        GROUP BY feed_item_id \
+                        ORDER BY published DESC LIMIT 100\
+                    ",
+                )?
+                .query_map([feed_id], Item::from_sql_row_with_count)?
+                .map(|i| i.unwrap())
+                .collect();
 
-        let items: Vec<(Item, i64)> = t
-            .prepare(
-                "\
-                    SELECT item_id, feed_id, max(retrieved), seen, \
-                    author, title, feed_item_id, link, published, \
-                    summary, count() as count \
-                    FROM items \
-                    WHERE feed_id = ? \
-                    GROUP BY feed_item_id \
-                    ORDER BY published DESC LIMIT 100\
-                ",
-            )?
-            .query_map([feed_id], Item::from_sql_row_with_count)?
-            .map(|i| i.unwrap())
-            .collect();
+            t.execute("UPDATE items SET seen = TRUE WHERE feed_id = ?", [feed_id])?;
 
-        t.execute("UPDATE items SET seen = TRUE WHERE feed_id = ?", [feed_id])?;
-
-        t.commit()?;
-        Ok(items)
+            t.commit()?;
+            Ok(items)
+        })
+        .await
     }
 
     pub async fn get_feed_items_by_item_id(
@@ -394,42 +526,48 @@ impl DbConn {
         feed_id: i64,
         item_id: &str,
     ) -> ah::Result<Vec<Item>> {
-        let t = self.conn.transaction()?;
+        let item_id = item_id.to_string();
 
-        let items: Vec<Item> = t
-            .prepare(
-                "\
-                    SELECT * FROM items \
-                    WHERE feed_id = ? AND feed_item_id IN (\
-                        SELECT feed_item_id FROM items \
-                        WHERE item_id = ?\
-                    ) \
-                    ORDER BY retrieved DESC\
-                ",
-            )?
-            .query_map((feed_id, item_id), Item::from_sql_row)?
-            .map(|i| i.unwrap())
-            .collect();
+        transaction(Arc::clone(&self.conn), move |t| {
+            let items: Vec<Item> = t
+                .prepare(
+                    "\
+                        SELECT * FROM items \
+                        WHERE feed_id = ? AND feed_item_id IN (\
+                            SELECT feed_item_id FROM items \
+                            WHERE item_id = ?\
+                        ) \
+                        ORDER BY retrieved DESC\
+                    ",
+                )?
+                .query_map((feed_id, &item_id), Item::from_sql_row)?
+                .map(|i| i.unwrap())
+                .collect();
 
-        t.execute("UPDATE items SET seen = TRUE WHERE feed_id = ?", [feed_id])?;
+            t.execute("UPDATE items SET seen = TRUE WHERE feed_id = ?", [feed_id])?;
 
-        t.commit()?;
-        Ok(items)
+            t.commit()?;
+            Ok(items)
+        })
+        .await
     }
 
     pub async fn check_item_exists(&mut self, item: &Item) -> ah::Result<bool> {
         if let Some(item_id) = item.item_id.as_ref() {
-            let t = self.conn.transaction()?;
+            let item_id = item_id.to_string();
 
-            let count: Vec<i64> = t
-                .prepare("SELECT count(item_id) FROM items WHERE item_id = ?")?
-                .query_map([item_id], |row| row.get(0))?
-                .map(|c| c.unwrap())
-                .collect();
-            let exists = *count.first().unwrap_or(&0) > 0;
+            transaction(Arc::clone(&self.conn), move |t| {
+                let count: Vec<i64> = t
+                    .prepare("SELECT count(item_id) FROM items WHERE item_id = ?")?
+                    .query_map([&item_id], |row| row.get(0))?
+                    .map(|c| c.unwrap())
+                    .collect();
+                let exists = *count.first().unwrap_or(&0) > 0;
 
-            t.finish()?;
-            Ok(exists)
+                t.finish()?;
+                Ok(exists)
+            })
+            .await
         } else {
             Err(err!("check_item_exists(): Invalid item. No item_id."))
         }

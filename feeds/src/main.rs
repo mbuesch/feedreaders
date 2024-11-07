@@ -33,7 +33,7 @@ use tokio::runtime;
 
 #[derive(Parser, Debug, Clone)]
 struct Opts {
-    #[arg(long, default_value = "feedreader")]
+    #[arg(long, default_value = "feeds")]
     db: String,
 }
 
