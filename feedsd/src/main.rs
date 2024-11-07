@@ -142,8 +142,9 @@ fn main() -> ah::Result<()> {
     let opts = Opts::parse();
 
     runtime::Builder::new_multi_thread()
-        .thread_keep_alive(Duration::from_secs(10))
         .worker_threads(opts.worker_threads.into())
+        .max_blocking_threads(opts.worker_threads.into()) // one blocking per worker.
+        .thread_keep_alive(Duration::from_secs(10))
         .enable_all()
         .build()
         .context("Tokio runtime builder")?
