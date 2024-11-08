@@ -11,6 +11,60 @@ Existing enclosures in the database won't be displayed and won't be refreshed.
 
 Thanks to [Marco Lochen](https://github.com/mlochen) for the idea and for the original Python implementation.
 
+# Building and installing
+
+## Prerequisites
+
+The Rust compiler must be installed to build feedreader.
+It is recommended to use the latest version of the stable Rust compiler.
+But Rust versions down to and including Rust 1.77 are supported by feedreader.
+
+[Rust installer](https://www.rust-lang.org/tools/install)
+
+The Rust installer will install the compiler and the build tool `cargo`.
+
+The build requires the additional `cargo-audit` and `cargo-auditable` tools to be installed.
+Run this command to install both tools:
+
+```sh
+cargo install cargo-audit cargo-auditable
+```
+
+## Building feedreader
+
+Run the `build.sh` script to build feedreader.
+
+After installing all build prerequisites, run the build script:
+
+```sh
+./build.sh
+```
+
+## Installing feedreader
+
+Then run the `install.sh` to install the feedreader to `/opt/feedreader/`:
+
+```sh
+./install.sh
+```
+
+## -lsqlite3: No such file or directory
+
+If during build you get the following error:
+
+```
+= note: /usr/bin/ld: cannot find -lsqlite3: No such file or directory
+    collect2: error: ld returned 1 exit status
+```
+
+please install the SQLite 3 libraries and development files to your system.
+
+On Debian Linux that is done with:
+
+```sh
+sudo apt install libsqlite3-dev
+```
+
 # License / Copyright
 
 Copyright (C) 2024 Michael Büsch
