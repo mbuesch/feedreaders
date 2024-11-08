@@ -2,7 +2,10 @@
 
 Feedreader/rs is a Rust re-implementation of the original [feedreader](https://github.com/mlochen/feedreader) Python implementation.
 
-The database format is 100% compatible with the original.
+The database format is almost fully compatible with the original.
+Re-using an existing database is possible.
+We don't implement 'enclosures', though.
+Existing enclosures in the database won't be displayed and won't be refreshed.
 
 # Thanks
 

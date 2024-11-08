@@ -20,8 +20,8 @@
 
 use anyhow::{self as ah, format_err as err, Context as _};
 use chrono::{DateTime, Utc};
-use feed_rs::model::{Entry as ParsedEntry, Feed as ParsedFeed};
-use feedsdb::{make_item_id, Db, DbConn, Enclosure, Item, DEBUG};
+use feed_rs::model::Feed as ParsedFeed;
+use feedsdb::{Db, DbConn, Item, DEBUG};
 use rand::{thread_rng, Rng as _};
 use std::time::Duration;
 use tokio::task;
@@ -95,15 +95,11 @@ async fn get_feed(href: &str) -> ah::Result<FeedResult> {
     Ok(FeedResult::Feed(feed))
 }
 
-async fn get_enclosures(_parsed_entry: &ParsedEntry) -> ah::Result<Vec<Enclosure>> {
-    Ok(vec![]) //TODO
-}
-
 async fn get_items(
     conn: &mut DbConn,
     parsed_feed: &ParsedFeed,
     now: DateTime<Utc>,
-) -> ah::Result<Vec<(Item, Vec<Enclosure>)>> {
+) -> ah::Result<Vec<Item>> {
     let mut items = Vec::with_capacity(16);
     for parsed_entry in &parsed_feed.entries {
         let feed_item_id = parsed_entry.id.clone();
@@ -158,8 +154,6 @@ async fn get_items(
             }
         }
 
-        let enclosures = get_enclosures(parsed_entry).await?;
-
         let mut item = Item {
             item_id: None,
             feed_id: None,
@@ -172,14 +166,14 @@ async fn get_items(
             published,
             summary,
         };
-        item.item_id = Some(make_item_id(&item, &enclosures).await);
+        item.item_id = Some(item.make_id().await);
 
         if !conn
             .check_item_exists(&item)
             .await
             .context("Check item exists")?
         {
-            items.push((item, enclosures));
+            items.push(item);
         }
     }
     Ok(items)

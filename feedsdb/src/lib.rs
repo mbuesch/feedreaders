@@ -113,31 +113,17 @@ impl Item {
     fn from_sql_row_with_count(row: &Row<'_>) -> rusqlite::Result<(Self, i64)> {
         Ok((Self::from_sql_row(row)?, row.get(10)?))
     }
-}
 
-#[derive(Clone, Debug)]
-pub struct Enclosure {
-    pub enclosure_id: Option<i64>,
-    pub item_id: Option<String>,
-    pub href: String,
-    pub length: i64,
-    pub type_: String,
-}
-
-pub async fn make_item_id(item: &Item, enclosures: &[Enclosure]) -> String {
-    let mut h = Sha256::new();
-    h.update(&item.feed_item_id);
-    h.update(&item.author);
-    h.update(&item.title);
-    h.update(&item.link);
-    h.update(format!("{}", item.published));
-    h.update(&item.summary);
-    for enclosure in enclosures {
-        h.update(&enclosure.href);
-        h.update(format!("{}", enclosure.length));
-        h.update(&enclosure.type_);
+    pub async fn make_id(&self) -> String {
+        let mut h = Sha256::new();
+        h.update(&self.feed_item_id);
+        h.update(&self.author);
+        h.update(&self.title);
+        h.update(&self.link);
+        h.update(format!("{}", self.published));
+        h.update(&self.summary);
+        hex::encode(h.finalize())
     }
-    hex::encode(h.finalize())
 }
 
 async fn transaction<F, R>(conn: Arc<Mutex<Connection>>, mut f: F) -> ah::Result<R>
@@ -263,32 +249,15 @@ impl DbConn {
                     )",
                 [],
             )?;
-            t.execute(
-                "\
-                    CREATE TABLE IF NOT EXISTS enclosures (\
-                        enclosure_id INTEGER PRIMARY KEY, \
-                        item_id VARCHAR, \
-                        href VARCHAR, \
-                        length INTEGER, \
-                        type VARCHAR, \
-                        FOREIGN KEY(item_id) REFERENCES items(item_id)\
-                    )",
-                [],
-            )?;
             t.execute("CREATE INDEX IF NOT EXISTS feed_id ON feeds(feed_id)", [])?;
             t.execute("CREATE INDEX IF NOT EXISTS item_id ON items(item_id)", [])?;
-            t.execute("CREATE INDEX IF NOT EXISTS enclosure_id ON enclosures(enclosure_id)", [])?;
 
             t.commit()?;
             Ok(())
         }).await
     }
 
-    pub async fn update_feed(
-        &mut self,
-        feed: &Feed,
-        items: &[(Item, Vec<Enclosure>)],
-    ) -> ah::Result<()> {
+    pub async fn update_feed(&mut self, feed: &Feed, items: &[Item]) -> ah::Result<()> {
         let feed = feed.clone();
         let items = items.to_vec();
 
@@ -320,7 +289,7 @@ impl DbConn {
                 feed_id,
             ))?;
 
-            for (item, enclosures) in &items {
+            for item in &items {
                 let Some(item_id) = &item.item_id else {
                     return Err(Error::Ah(err!("update_feed(): Invalid item. No item_id.")));
                 };
@@ -347,27 +316,6 @@ impl DbConn {
                     dt_to_sql(&item.published),
                     &item.summary,
                 ))?;
-
-                for enclosure in enclosures {
-                    if enclosure.item_id.is_some() && enclosure.item_id.as_ref() != Some(item_id) {
-                        return Err(Error::Ah(err!(
-                            "update_feed(): Invalid enclosure. Invalid item_id."
-                        )));
-                    }
-                    t.prepare_cached(
-                        "\
-                            INSERT INTO enclosures
-                            VALUES (?, ?, ?, ?, ?)
-                        ",
-                    )?
-                    .execute((
-                        None::<i64>,
-                        item_id,
-                        &enclosure.href,
-                        enclosure.length,
-                        &enclosure.type_,
-                    ))?;
-                }
             }
 
             t.commit()?;
@@ -409,13 +357,6 @@ impl DbConn {
 
             transaction(Arc::clone(&self.conn), move |t| {
                 for feed_id in &feed_ids {
-                    t.prepare_cached(
-                        "\
-                            DELETE FROM enclosures WHERE item_id IN \
-                            (SELECT item_id FROM items WHERE feed_id = ?)\
-                        ",
-                    )?
-                    .execute([feed_id])?;
                     t.prepare_cached(
                         "\
                             DELETE FROM items \

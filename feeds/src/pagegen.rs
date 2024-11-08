@@ -116,17 +116,6 @@ async fn gen_feed_list(
 }
 
 #[rustfmt::skip]
-#[allow(clippy::ptr_arg)]
-async fn gen_enclosure_list(
-    _b: &mut String,
-    _conn: &mut DbConn,
-    _item_id: &str,
-) -> ah::Result<()> {
-    //TODO
-    Ok(())
-}
-
-#[rustfmt::skip]
 async fn gen_item_list(
     b: &mut String,
     conn: &mut DbConn,
@@ -161,7 +150,6 @@ async fn gen_item_list(
         ln!(b, r#"    <div class="date">{timestring}</div>"#)?;
         ln!(b, r#"    <br />"#)?;
         ln!(b, r#"    <div class="summary">{summary}</div>"#)?;
-        gen_enclosure_list(b, conn, item_id).await?;
         ln!(b, r#"  </div>"#)?;
         ln!(b, r#"  <hr />"#)?;
     }
@@ -198,7 +186,6 @@ async fn gen_item_history_list(
         ln!(b, r#"    <div class="date">{timestring}</div>"#)?;
         ln!(b, r#"    <br />"#)?;
         ln!(b, r#"    <div class="summary">{summary}</div>"#)?;
-        gen_enclosure_list(b, conn, item_id).await?;
         ln!(b, r#"  </div>"#)?;
         ln!(b, r#"  <hr />"#)?;
     }
