@@ -209,6 +209,7 @@ async fn gen_page(
     ln!(b, r#"  <link rel="stylesheet" type="text/css" href="/feeds/style.css">"#)?;
     ln!(b, r#"  <link rel="icon" type="image/png" href="/feeds/icon.png">"#)?;
     ln!(b, r#"  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">"#)?;
+    ln!(b, r#"  <meta name="generator" content="feedreader (Rust variant)">"#)?;
     ln!(b, r#"</head>"#)?;
     ln!(b, r#"<body>"#)?;
 
