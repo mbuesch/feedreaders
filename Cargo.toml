@@ -41,7 +41,7 @@ tokio = "1"
 feedsdb = { version = "1", path = "./feedsdb" }
 
 [profile.release]
-opt-level = "z"
+opt-level = 3
 lto = "fat"
 panic = "abort"
 strip = "symbols"
