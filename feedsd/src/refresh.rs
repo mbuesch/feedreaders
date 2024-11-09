@@ -186,15 +186,22 @@ async fn get_items(
 }
 
 pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Duration> {
-    let mut conn = db.open().await.context("Open database")?;
-
     let now = Utc::now();
     let next_retrieval = now + rand_interval(refresh_interval, REFRESH_SLACK);
 
-    for mut feed in conn.get_feeds_due().await.context("Get feeds due")? {
+    let feeds_due = db
+        .open()
+        .await
+        .context("Open database")?
+        .get_feeds_due()
+        .await
+        .context("Get feeds due")?;
+
+    for mut feed in feeds_due {
         if DEBUG {
             println!("Refreshing {} ...", feed.title);
         }
+
         let parsed_feed = match get_feed(&feed.href).await? {
             FeedResult::Feed(f) => f,
             FeedResult::MovedPermanently(location) => {
@@ -203,20 +210,27 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Du
                 } else {
                     feed.disabled = true;
                 }
-                conn.update_feed(&feed, &[], None)
+                db.open()
+                    .await
+                    .context("Open database")?
+                    .update_feed(&feed, &[], None)
                     .await
                     .context("Update feed")?;
                 continue;
             }
             FeedResult::Gone => {
                 feed.disabled = true;
-                conn.update_feed(&feed, &[], None)
+                db.open()
+                    .await
+                    .context("Open database")?
+                    .update_feed(&feed, &[], None)
                     .await
                     .context("Update feed")?;
                 continue;
             }
         };
 
+        let mut conn = db.open().await.context("Open database")?;
         let (items, oldest) = get_items(&mut conn, &parsed_feed, now).await?;
 
         if let Some(title) = parsed_feed.title.as_ref() {
@@ -237,7 +251,13 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Du
             .context("Update feed")?;
     }
 
-    let next_due = conn.get_next_due_time().await.context("Update feed")?;
+    let next_due = db
+        .open()
+        .await
+        .context("Open database")?
+        .get_next_due_time()
+        .await
+        .context("Update feed")?;
     let now = Utc::now();
     let dur = (next_due - now).num_milliseconds().max(0);
     let sleep_dur = Duration::from_millis(dur.try_into().unwrap());
