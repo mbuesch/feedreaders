@@ -79,7 +79,7 @@ The web frontend `feeds` needs to be configured in your web browser as CGI appli
 
 ## lighttpd web server
 
-Add the following configuration to `/etc/lighttpd/conf-enabled/10-cgi.conf`:
+Add the following configuration to `/etc/lighttpd/conf-enabled/feedreader.conf`:
 
 ```
 server.modules += ( "mod_cgi" )
@@ -96,6 +96,7 @@ Add the following configuration to `/etc/apache2/conf-enabled/feedreader.conf`:
 
 ```
 ScriptAlias /cgi-bin/feeds /opt/feedreader/lib/cgi-bin/feeds
+
 <Directory /opt/feedreader/lib/cgi-bin>
     AllowOverride None
     Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch -Indexes
