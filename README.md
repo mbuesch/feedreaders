@@ -30,6 +30,14 @@ Run this command to install both tools:
 cargo install cargo-audit cargo-auditable
 ```
 
+The SQLite3 database has to be installed in your operating system.
+
+If you use Debian Linux, you can use the following command to install SQLite3:
+
+```sh
+sudo apt install libsqlite3-dev
+```
+
 ## Building feedreader
 
 Run the `build.sh` script to build feedreader.
@@ -65,11 +73,11 @@ On Debian Linux that is done with:
 sudo apt install libsqlite3-dev
 ```
 
-# Configuring CGI
+# Configuring web server CGI
 
 The web frontend `feeds` needs to be configured in your web browser as CGI application.
 
-## lighttpd
+## lighttpd web server
 
 Add the following configuration to `/etc/lighttpd/conf-enabled/10-cgi.conf`:
 
