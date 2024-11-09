@@ -24,7 +24,7 @@ use feedsdb::{Db, DbConn};
 use std::{fmt::Write as _, write as wr, writeln as ln};
 
 const MIME: &str = "text/html";
-const BODY_PREALLOC: usize = 1024 * 512;
+const BODY_PREALLOC: usize = 1024 * 1024;
 
 fn floor_char_boundary(s: &str, mut i: usize) -> usize {
     if i >= s.len() {
