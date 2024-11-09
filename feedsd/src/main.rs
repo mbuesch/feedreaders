@@ -57,6 +57,10 @@ struct Opts {
     /// Feed refresh interval, in seconds.
     #[arg(long, default_value = "600")]
     refresh_interval: u64,
+
+    /// Do not create `/run/feedsd/feedsd.pid`.
+    #[arg(long)]
+    no_pidfile: bool,
 }
 
 impl Opts {
@@ -88,7 +92,9 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
     let opts = Arc::new(opts);
 
     // Create pid-file in /run.
-    make_pidfile()?;
+    if !opts.no_pidfile {
+        make_pidfile()?;
+    }
 
     // Register unix signal handlers.
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
