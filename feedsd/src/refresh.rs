@@ -21,7 +21,7 @@
 use anyhow::{self as ah, format_err as err, Context as _};
 use chrono::{DateTime, Utc};
 use feed_rs::model::Feed as ParsedFeed;
-use feedsdb::{Db, DbConn, Item, DEBUG};
+use feedsdb::{Db, DbConn, Feed, Item, DEBUG};
 use rand::{thread_rng, Rng as _};
 use std::time::Duration;
 use tokio::task;
@@ -185,9 +185,65 @@ async fn get_items(
     Ok((items, oldest))
 }
 
-pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Duration> {
+async fn refresh_feed(db: &Db, mut feed: Feed, next_retrieval: DateTime<Utc>) -> ah::Result<()> {
+    if DEBUG {
+        println!("Refreshing {} ...", feed.title);
+    }
+
+    let parsed_feed = match get_feed(&feed.href).await? {
+        FeedResult::Feed(f) => f,
+        FeedResult::MovedPermanently(location) => {
+            if let Some(location) = location {
+                feed.href = location;
+            } else {
+                feed.disabled = true;
+            }
+            db.open()
+                .await
+                .context("Open database")?
+                .update_feed(&feed, &[], None)
+                .await
+                .context("Update feed")?;
+            return Ok(());
+        }
+        FeedResult::Gone => {
+            feed.disabled = true;
+            db.open()
+                .await
+                .context("Open database")?
+                .update_feed(&feed, &[], None)
+                .await
+                .context("Update feed")?;
+            return Ok(());
+        }
+    };
+
     let now = Utc::now();
-    let next_retrieval = now + rand_interval(refresh_interval, REFRESH_SLACK);
+    let mut conn = db.open().await.context("Open database")?;
+    let (items, oldest) = get_items(&mut conn, &parsed_feed, now).await?;
+
+    if let Some(title) = parsed_feed.title.as_ref() {
+        feed.title = title.content.clone();
+    }
+    feed.last_retrieval = now;
+    feed.next_retrieval = next_retrieval;
+
+    if !items.is_empty() {
+        feed.last_activity = now;
+        feed.updated_items += items.len() as i64;
+    }
+
+    let gc_thres = oldest - GC_AGE_OFFSET;
+
+    conn.update_feed(&feed, &items, Some(gc_thres))
+        .await
+        .context("Update feed")?;
+
+    Ok(())
+}
+
+pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Duration> {
+    let next_retrieval = Utc::now() + rand_interval(refresh_interval, REFRESH_SLACK);
 
     let feeds_due = db
         .open()
@@ -197,58 +253,8 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Du
         .await
         .context("Get feeds due")?;
 
-    for mut feed in feeds_due {
-        if DEBUG {
-            println!("Refreshing {} ...", feed.title);
-        }
-
-        let parsed_feed = match get_feed(&feed.href).await? {
-            FeedResult::Feed(f) => f,
-            FeedResult::MovedPermanently(location) => {
-                if let Some(location) = location {
-                    feed.href = location;
-                } else {
-                    feed.disabled = true;
-                }
-                db.open()
-                    .await
-                    .context("Open database")?
-                    .update_feed(&feed, &[], None)
-                    .await
-                    .context("Update feed")?;
-                continue;
-            }
-            FeedResult::Gone => {
-                feed.disabled = true;
-                db.open()
-                    .await
-                    .context("Open database")?
-                    .update_feed(&feed, &[], None)
-                    .await
-                    .context("Update feed")?;
-                continue;
-            }
-        };
-
-        let mut conn = db.open().await.context("Open database")?;
-        let (items, oldest) = get_items(&mut conn, &parsed_feed, now).await?;
-
-        if let Some(title) = parsed_feed.title.as_ref() {
-            feed.title = title.content.clone();
-        }
-        feed.last_retrieval = now;
-        feed.next_retrieval = next_retrieval;
-
-        if !items.is_empty() {
-            feed.last_activity = now;
-            feed.updated_items += items.len() as i64;
-        }
-
-        let gc_thres = oldest - GC_AGE_OFFSET;
-
-        conn.update_feed(&feed, &items, Some(gc_thres))
-            .await
-            .context("Update feed")?;
+    for feed in feeds_due {
+        refresh_feed(db, feed, next_retrieval).await?;
     }
 
     let next_due = db
@@ -258,8 +264,7 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Du
         .get_next_due_time()
         .await
         .context("Update feed")?;
-    let now = Utc::now();
-    let dur = (next_due - now).num_milliseconds().max(0);
+    let dur = (next_due - Utc::now()).num_milliseconds().max(0);
     let sleep_dur = Duration::from_millis(dur.try_into().unwrap());
     let sleep_dur = sleep_dur + Duration::from_secs(1);
 
