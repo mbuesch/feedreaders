@@ -100,6 +100,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
 
     // Create the database access object.
     let db = Arc::new(Db::new(&opts.db).await.context("Database")?);
+
     // Initialize the database, if not already done.
     db.open()
         .await
@@ -110,6 +111,14 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
 
     // Ready-signal to systemd.
     systemd_notify_ready().context("Notify systemd")?;
+
+    // Vacuum the database.
+    db.open()
+        .await
+        .context("Open database")?
+        .vacuum()
+        .await
+        .context("Vacuum database")?;
 
     // Task: DB refresher.
     task::spawn({

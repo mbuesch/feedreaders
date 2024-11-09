@@ -268,17 +268,20 @@ impl DbConn {
 
             t.commit()?;
             Ok(())
-        }).await?;
+        })
+        .await
+    }
 
+    pub async fn vacuum(&mut self) -> ah::Result<()> {
         spawn_blocking({
             let conn = Arc::clone(&self.conn);
             move || {
                 let conn = conn.lock().expect("Mutex poisoned");
-                conn.execute("VACUUM", [])
+                conn.execute("VACUUM", [])?;
+                Ok(())
             }
-        }).await??;
-
-        Ok(())
+        })
+        .await?
     }
 
     pub async fn update_feed(
