@@ -65,6 +65,36 @@ On Debian Linux that is done with:
 sudo apt install libsqlite3-dev
 ```
 
+# Configuring CGI
+
+The web frontend `feeds` needs to be configured in your web browser as CGI application.
+
+## lighttpd
+
+Add the following configuration to `/etc/lighttpd/conf-enabled/10-cgi.conf`:
+
+```
+server.modules += ( "mod_cgi" )
+
+$HTTP["url"] =~ "^/cgi-bin/" {
+    cgi.assign = ( "" => "" )
+    alias.url += ( "/cgi-bin/" => "/opt/feedreader/lib/cgi-bin/" )
+}
+```
+
+## Apache web server
+
+Add the following configuration to `/etc/apache2/conf-enabled/feedreader.conf`:
+
+```
+ScriptAlias /cgi-bin/feeds /opt/feedreader/lib/cgi-bin/feeds
+<Directory /opt/feedreader/lib/cgi-bin>
+    AllowOverride None
+    Options +ExecCGI -MultiViews +SymLinksIfOwnerMatch -Indexes
+    Require all granted
+</Directory>
+```
+
 # License / Copyright
 
 Copyright (C) 2024 Michael Büsch
