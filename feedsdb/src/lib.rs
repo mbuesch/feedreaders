@@ -300,13 +300,13 @@ impl DbConn {
             t.prepare_cached(
                 "\
                     UPDATE feeds SET \
-                        href = ?,
-                        title = ?,
-                        last_retrieval = ?,
-                        next_retrieval = ?,
-                        last_activity = ?,
-                        disabled = ?,
-                        updated_items = ?
+                        href = ?, \
+                        title = ?, \
+                        last_retrieval = ?, \
+                        next_retrieval = ?, \
+                        last_activity = ?, \
+                        disabled = ?, \
+                        updated_items = ? \
                     WHERE feed_id = ?\
                 ",
             )?
