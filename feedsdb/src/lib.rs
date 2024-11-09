@@ -270,10 +270,13 @@ impl DbConn {
             Ok(())
         }).await?;
 
-        {
-            let conn = self.conn.lock().expect("Mutex poisoned");
-            conn.execute("VACUUM", [])?;
-        }
+        spawn_blocking({
+            let conn = Arc::clone(&self.conn);
+            move || {
+                let conn = conn.lock().expect("Mutex poisoned");
+                conn.execute("VACUUM", [])
+            }
+        }).await??;
 
         Ok(())
     }
