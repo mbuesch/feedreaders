@@ -24,9 +24,13 @@ use feed_rs::model::Feed as ParsedFeed;
 use feedsdb::{Db, DbConn, Feed, Item, DEBUG};
 use rand::{thread_rng, Rng as _};
 use std::{sync::Arc, time::Duration};
-use tokio::task::{self, JoinSet};
+use tokio::{
+    sync::Semaphore,
+    task::{self, JoinSet},
+};
 
 const NET_TIMEOUT: Duration = Duration::from_secs(10);
+const NET_CONCURRENCY: usize = 1; // no concurrency
 const REFRESH_SLACK: f64 = 0.1;
 const GC_AGE_OFFSET: Duration = Duration::from_secs(365 * 24 * 60 * 60); // 1 year
 
@@ -189,36 +193,41 @@ async fn refresh_feed(
     db: Arc<Db>,
     mut feed: Feed,
     next_retrieval: DateTime<Utc>,
+    net_sema: Arc<Semaphore>,
 ) -> ah::Result<()> {
     if DEBUG {
         println!("Refreshing {} ...", feed.title);
     }
 
-    let parsed_feed = match get_feed(&feed.href).await? {
-        FeedResult::Feed(f) => f,
-        FeedResult::MovedPermanently(location) => {
-            if let Some(location) = location {
-                feed.href = location;
-            } else {
-                feed.disabled = true;
+    let parsed_feed = {
+        let _permit = net_sema.acquire().await?;
+
+        match get_feed(&feed.href).await? {
+            FeedResult::Feed(f) => f,
+            FeedResult::MovedPermanently(location) => {
+                if let Some(location) = location {
+                    feed.href = location;
+                } else {
+                    feed.disabled = true;
+                }
+                db.open()
+                    .await
+                    .context("Open database")?
+                    .update_feed(&feed, &[], None)
+                    .await
+                    .context("Update feed")?;
+                return Ok(());
             }
-            db.open()
-                .await
-                .context("Open database")?
-                .update_feed(&feed, &[], None)
-                .await
-                .context("Update feed")?;
-            return Ok(());
-        }
-        FeedResult::Gone => {
-            feed.disabled = true;
-            db.open()
-                .await
-                .context("Open database")?
-                .update_feed(&feed, &[], None)
-                .await
-                .context("Update feed")?;
-            return Ok(());
+            FeedResult::Gone => {
+                feed.disabled = true;
+                db.open()
+                    .await
+                    .context("Open database")?
+                    .update_feed(&feed, &[], None)
+                    .await
+                    .context("Update feed")?;
+                return Ok(());
+            }
         }
     };
 
@@ -257,11 +266,14 @@ pub async fn refresh_feeds(db: Arc<Db>, refresh_interval: Duration) -> ah::Resul
         .await
         .context("Get feeds due")?;
 
+    let net_sema = Arc::new(Semaphore::new(NET_CONCURRENCY));
+
     let mut set = JoinSet::new();
     for feed in feeds_due {
         set.spawn({
             let db = Arc::clone(&db);
-            async move { refresh_feed(db, feed, next_retrieval).await }
+            let net_sema = Arc::clone(&net_sema);
+            async move { refresh_feed(db, feed, next_retrieval, net_sema).await }
         });
     }
     while let Some(result) = set.join_next().await {
