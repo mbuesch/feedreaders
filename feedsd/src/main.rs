@@ -66,7 +66,7 @@ impl Opts {
 }
 
 #[must_use]
-async fn do_refresh(db: &Db, opts: &Opts) -> (bool, Duration) {
+async fn do_refresh(db: Arc<Db>, opts: &Opts) -> (bool, Duration) {
     if DEBUG {
         eprintln!("Refreshing...");
     }
@@ -128,7 +128,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
         async move {
             let mut err_count = 0_u32;
             loop {
-                let (ok, sleep_dur) = do_refresh(&db, &opts).await;
+                let (ok, sleep_dur) = do_refresh(Arc::clone(&db), &opts).await;
                 if ok {
                     err_count = err_count.saturating_sub(1);
                 } else {
@@ -159,7 +159,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
             }
             _ = sighup.recv() => {
                 println!("SIGHUP: Triggering database refresh.");
-                let _ = do_refresh(&db, &opts).await;
+                let _ = do_refresh(Arc::clone(&db), &opts).await;
             }
             code = exit_sock_rx.recv() => {
                 exitcode = code.unwrap_or_else(|| Err(err!("Unknown error code.")));

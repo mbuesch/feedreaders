@@ -23,8 +23,8 @@ use chrono::{DateTime, Utc};
 use feed_rs::model::Feed as ParsedFeed;
 use feedsdb::{Db, DbConn, Feed, Item, DEBUG};
 use rand::{thread_rng, Rng as _};
-use std::time::Duration;
-use tokio::task;
+use std::{sync::Arc, time::Duration};
+use tokio::task::{self, JoinSet};
 
 const NET_TIMEOUT: Duration = Duration::from_secs(10);
 const REFRESH_SLACK: f64 = 0.1;
@@ -185,7 +185,11 @@ async fn get_items(
     Ok((items, oldest))
 }
 
-async fn refresh_feed(db: &Db, mut feed: Feed, next_retrieval: DateTime<Utc>) -> ah::Result<()> {
+async fn refresh_feed(
+    db: Arc<Db>,
+    mut feed: Feed,
+    next_retrieval: DateTime<Utc>,
+) -> ah::Result<()> {
     if DEBUG {
         println!("Refreshing {} ...", feed.title);
     }
@@ -242,7 +246,7 @@ async fn refresh_feed(db: &Db, mut feed: Feed, next_retrieval: DateTime<Utc>) ->
     Ok(())
 }
 
-pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Duration> {
+pub async fn refresh_feeds(db: Arc<Db>, refresh_interval: Duration) -> ah::Result<Duration> {
     let next_retrieval = Utc::now() + rand_interval(refresh_interval, REFRESH_SLACK);
 
     let feeds_due = db
@@ -253,8 +257,15 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Du
         .await
         .context("Get feeds due")?;
 
+    let mut set = JoinSet::new();
     for feed in feeds_due {
-        refresh_feed(db, feed, next_retrieval).await?;
+        set.spawn({
+            let db = Arc::clone(&db);
+            async move { refresh_feed(db, feed, next_retrieval).await }
+        });
+    }
+    while let Some(result) = set.join_next().await {
+        let _: () = result??;
     }
 
     let next_due = db
