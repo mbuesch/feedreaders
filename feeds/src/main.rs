@@ -34,6 +34,7 @@ use tokio::runtime;
 
 #[derive(Parser, Debug, Clone)]
 struct Opts {
+    /// The name of the database to use.
     #[arg(long, default_value = "feeds")]
     db: String,
 }
