@@ -120,7 +120,7 @@ impl Item {
         h.update(&self.author);
         h.update(&self.title);
         h.update(&self.link);
-        h.update(format!("{}", self.published));
+        h.update(format!("{}", dt_to_sql(&self.published)));
         h.update(&self.summary);
         hex::encode(h.finalize())
     }
