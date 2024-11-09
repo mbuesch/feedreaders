@@ -28,6 +28,7 @@ use tokio::task;
 
 const NET_TIMEOUT: Duration = Duration::from_secs(10);
 const REFRESH_SLACK: f64 = 0.1;
+const GC_AGE_OFFSET: Duration = Duration::from_secs(365 * 24 * 60 * 60); // 1 year
 
 fn rand_interval(refresh_interval: Duration, slack_rel: f64) -> Duration {
     let slack = (refresh_interval.as_millis() as f64 * slack_rel) as u64;
@@ -99,8 +100,9 @@ async fn get_items(
     conn: &mut DbConn,
     parsed_feed: &ParsedFeed,
     now: DateTime<Utc>,
-) -> ah::Result<Vec<Item>> {
+) -> ah::Result<(Vec<Item>, DateTime<Utc>)> {
     let mut items = Vec::with_capacity(16);
+    let mut oldest = now;
     for parsed_entry in &parsed_feed.entries {
         let feed_item_id = parsed_entry.id.clone();
 
@@ -140,6 +142,10 @@ async fn get_items(
             now
         };
 
+        if published < oldest {
+            oldest = published;
+        }
+
         let mut summary = parsed_entry
             .summary
             .as_ref()
@@ -176,7 +182,7 @@ async fn get_items(
             items.push(item);
         }
     }
-    Ok(items)
+    Ok((items, oldest))
 }
 
 pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Duration> {
@@ -197,17 +203,21 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Du
                 } else {
                     feed.disabled = true;
                 }
-                conn.update_feed(&feed, &[]).await.context("Update feed")?;
+                conn.update_feed(&feed, &[], None)
+                    .await
+                    .context("Update feed")?;
                 continue;
             }
             FeedResult::Gone => {
                 feed.disabled = true;
-                conn.update_feed(&feed, &[]).await.context("Update feed")?;
+                conn.update_feed(&feed, &[], None)
+                    .await
+                    .context("Update feed")?;
                 continue;
             }
         };
 
-        let items = get_items(&mut conn, &parsed_feed, now).await?;
+        let (items, oldest) = get_items(&mut conn, &parsed_feed, now).await?;
 
         if let Some(title) = parsed_feed.title.as_ref() {
             feed.title = title.content.clone();
@@ -220,7 +230,9 @@ pub async fn refresh_feeds(db: &Db, refresh_interval: Duration) -> ah::Result<Du
             feed.updated_items += items.len() as i64;
         }
 
-        conn.update_feed(&feed, &items)
+        let gc_thres = oldest - GC_AGE_OFFSET;
+
+        conn.update_feed(&feed, &items, Some(gc_thres))
             .await
             .context("Update feed")?;
     }

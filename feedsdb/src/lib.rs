@@ -252,12 +252,38 @@ impl DbConn {
             t.execute("CREATE INDEX IF NOT EXISTS feed_id ON feeds(feed_id)", [])?;
             t.execute("CREATE INDEX IF NOT EXISTS item_id ON items(item_id)", [])?;
 
+            // Remove legacy table.
+            t.execute("DROP TABLE IF EXISTS enclosures", [])?;
+
+            // Remove dangling items.
+            t.execute(
+                "\
+                    DELETE FROM items \
+                    WHERE feed_id NOT IN (\
+                        SELECT feed_id FROM feeds\
+                    )\
+                ",
+                []
+            )?;
+
             t.commit()?;
             Ok(())
-        }).await
+        }).await?;
+
+        {
+            let conn = self.conn.lock().expect("Mutex poisoned");
+            conn.execute("VACUUM", [])?;
+        }
+
+        Ok(())
     }
 
-    pub async fn update_feed(&mut self, feed: &Feed, items: &[Item]) -> ah::Result<()> {
+    pub async fn update_feed(
+        &mut self,
+        feed: &Feed,
+        items: &[Item],
+        gc_thres: Option<DateTime<Utc>>,
+    ) -> ah::Result<()> {
         let feed = feed.clone();
         let items = items.to_vec();
 
@@ -316,6 +342,16 @@ impl DbConn {
                     dt_to_sql(&item.published),
                     &item.summary,
                 ))?;
+            }
+
+            if let Some(gc_thres) = gc_thres.as_ref() {
+                t.prepare_cached(
+                    "\
+                        DELETE FROM items \
+                        WHERE feed_id = ? AND published < ? AND seen = TRUE\
+                    ",
+                )?
+                .execute((feed_id, dt_to_sql(gc_thres)))?;
             }
 
             t.commit()?;

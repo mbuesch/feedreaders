@@ -92,7 +92,11 @@ async fn gen_feed_list(
             "".to_string()
         };
 
+        let href = &feed.href;
+
         ln!(b, r#"      <tr{tr_class}>"#)?;
+        ln!(b, r#"        <!-- {title} -->"#)?;
+        ln!(b, r#"        <!-- {href} -->"#)?;
         ln!(b, r#"        <td>"#)?;
         ln!(b, r#"          <input name="del" value="{feed_id}" type="checkbox">"#)?;
         ln!(b, r#"        </td>"#)?;
