@@ -378,6 +378,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "feedscli"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "feedsdb",
+ "tokio",
+]
+
+[[package]]
 name = "feedsd"
 version = "1.0.0"
 dependencies = [

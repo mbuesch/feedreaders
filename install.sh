@@ -139,6 +139,14 @@ install_feeds()
         /opt/feedreader/share/feedreader/
 }
 
+install_feedscli()
+{
+    do_install \
+        -o root -g root -m 0755 \
+        "$target/feedscli" \
+        /opt/feedreader/bin/
+}
+
 release="release"
 while [ $# -ge 1 ]; do
     case "$1" in
@@ -161,6 +169,7 @@ stop_services
 install_dirs
 install_feedsd
 install_feeds
+install_feedscli
 start_services
 
 # vim: ts=4 sw=4 expandtab

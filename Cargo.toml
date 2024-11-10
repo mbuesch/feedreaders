@@ -3,6 +3,7 @@
 [workspace]
 members = [
     "feeds",
+    "feedscli",
     "feedsd",
     "feedsdb",
 ]

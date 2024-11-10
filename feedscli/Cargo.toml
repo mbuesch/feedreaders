@@ -1,0 +1,24 @@
+# -*- coding: utf-8 -*-
+
+[package]
+name = "feedscli"
+description = "feedreader-rs command line interface"
+version = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+readme = { workspace = true }
+categories = { workspace = true }
+keywords = { workspace = true }
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = [ "std", "help", "usage", "error-context", "derive" ] }
+feedsdb = { workspace = true }
+tokio = { workspace = true, features = [ "rt-multi-thread", "macros", "signal", "sync" ] }
+
+# vim: ts=4 sw=4 expandtab
