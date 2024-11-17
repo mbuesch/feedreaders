@@ -21,7 +21,7 @@
 use anyhow::{self as ah, format_err as err, Context as _};
 use chrono::{DateTime, Utc};
 use feed_rs::model::Feed as ParsedFeed;
-use feedsdb::{Db, DbConn, Feed, Item, DEBUG};
+use feedsdb::{Db, DbConn, Feed, Item, ItemStatus, DEBUG};
 use rand::{thread_rng, Rng as _};
 use std::{sync::Arc, time::Duration};
 use tokio::{
@@ -33,6 +33,7 @@ const NET_TIMEOUT: Duration = Duration::from_secs(10);
 const NET_CONCURRENCY: usize = 1; // no concurrency
 const REFRESH_SLACK: f64 = 0.1;
 const GC_AGE_OFFSET: Duration = Duration::from_secs(365 * 24 * 60 * 60); // 1 year
+const NOTIFY_ONLY_NEW_ITEMS: bool = true;
 
 fn rand_interval(refresh_interval: Duration, slack_rel: f64) -> Duration {
     let slack = (refresh_interval.as_millis() as f64 * slack_rel) as u64;
@@ -104,9 +105,10 @@ async fn get_items(
     conn: &mut DbConn,
     parsed_feed: &ParsedFeed,
     now: DateTime<Utc>,
-) -> ah::Result<(Vec<Item>, DateTime<Utc>)> {
+) -> ah::Result<(Vec<Item>, DateTime<Utc>, i64)> {
     let mut items = Vec::with_capacity(16);
     let mut oldest = now;
+    let mut new_items_count = 0;
     for parsed_entry in &parsed_feed.entries {
         let feed_item_id = parsed_entry.id.clone();
 
@@ -178,15 +180,21 @@ async fn get_items(
         };
         item.item_id = Some(item.make_id().await);
 
-        if !conn
+        match conn
             .check_item_exists(&item)
             .await
             .context("Check item exists")?
         {
-            items.push(item);
+            ItemStatus::Exists => (),
+            s @ ItemStatus::New | s @ ItemStatus::Updated => {
+                items.push(item);
+                if s == ItemStatus::New {
+                    new_items_count += 1;
+                }
+            }
         }
     }
-    Ok((items, oldest))
+    Ok((items, oldest, new_items_count))
 }
 
 async fn refresh_feed(
@@ -233,7 +241,7 @@ async fn refresh_feed(
 
     let now = Utc::now();
     let mut conn = db.open().await.context("Open database")?;
-    let (items, oldest) = get_items(&mut conn, &parsed_feed, now).await?;
+    let (items, oldest, new_items_count) = get_items(&mut conn, &parsed_feed, now).await?;
 
     if let Some(title) = parsed_feed.title.as_ref() {
         feed.title = title.content.clone();
@@ -243,7 +251,11 @@ async fn refresh_feed(
 
     if !items.is_empty() {
         feed.last_activity = now;
-        feed.updated_items += items.len() as i64;
+        if NOTIFY_ONLY_NEW_ITEMS {
+            feed.updated_items += new_items_count;
+        } else {
+            feed.updated_items += items.len() as i64;
+        }
     }
 
     let gc_thres = oldest - GC_AGE_OFFSET;

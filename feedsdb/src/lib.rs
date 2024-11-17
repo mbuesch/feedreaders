@@ -126,6 +126,13 @@ impl Item {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ItemStatus {
+    New,
+    Updated,
+    Exists,
+}
+
 async fn transaction<F, R>(conn: Arc<Mutex<Connection>>, mut f: F) -> ah::Result<R>
 where
     F: FnMut(rusqlite::Transaction) -> Result<R, Error> + Send + 'static,
@@ -571,12 +578,25 @@ impl DbConn {
         .await
     }
 
-    pub async fn check_item_exists(&mut self, item: &Item) -> ah::Result<bool> {
+    pub async fn check_item_exists(&mut self, item: &Item) -> ah::Result<ItemStatus> {
         if let Some(item_id) = item.item_id.as_ref() {
-            let item_id = item_id.to_string();
+            let item_id = item_id.clone();
+            let feed_item_id = item.feed_item_id.clone();
 
             transaction(Arc::clone(&self.conn), move |t| {
-                let count: Vec<i64> = t
+                let feed_item_id_count: Vec<i64> = t
+                    .prepare_cached(
+                        "\
+                            SELECT count(feed_item_id) \
+                            FROM items \
+                            WHERE feed_item_id = ?\
+                        ",
+                    )?
+                    .query_map([&feed_item_id], |row| row.get(0))?
+                    .map(|c| c.unwrap())
+                    .collect();
+
+                let item_id_count: Vec<i64> = t
                     .prepare_cached(
                         "\
                             SELECT count(item_id) \
@@ -587,10 +607,20 @@ impl DbConn {
                     .query_map([&item_id], |row| row.get(0))?
                     .map(|c| c.unwrap())
                     .collect();
-                let exists = *count.first().unwrap_or(&0) > 0;
+
+                let feed_item_id_count = *feed_item_id_count.first().unwrap_or(&0);
+                let item_id_count = *item_id_count.first().unwrap_or(&0);
+
+                let status = if item_id_count == 0 && feed_item_id_count == 0 {
+                    ItemStatus::New
+                } else if item_id_count == 0 {
+                    ItemStatus::Updated
+                } else {
+                    ItemStatus::Exists
+                };
 
                 t.finish()?;
-                Ok(exists)
+                Ok(status)
             })
             .await
         } else {
