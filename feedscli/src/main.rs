@@ -21,7 +21,7 @@
 
 mod command;
 
-use crate::command::list::command_list;
+use crate::command::{list::command_list, seen::command_seen};
 use anyhow::{self as ah, Context as _};
 use clap::{Parser, Subcommand};
 use feedsdb::Db;
@@ -46,6 +46,13 @@ struct Opts {
 enum Command {
     /// List all feeds from the database.
     List,
+
+    /// Mark items as "seen".
+    Seen {
+        /// The feed ID to set to "seen".
+        /// Or alternatively "all" to set all feeds to seen.
+        id: String,
+    },
 }
 
 async fn async_main(opts: Opts) -> ah::Result<()> {
@@ -53,8 +60,9 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
 
     let db = Db::new(&opts.db).await.context("Database")?;
 
-    match opts.command {
+    match &opts.command {
         Command::List => command_list(&db).await,
+        Command::Seen { id } => command_seen(&db, id).await,
     }
 }
 

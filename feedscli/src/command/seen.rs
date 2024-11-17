@@ -17,7 +17,24 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-pub mod list;
-pub mod seen;
+use anyhow::{self as ah, Context as _};
+use feedsdb::Db;
+
+pub async fn command_seen(db: &Db, id: &str) -> ah::Result<()> {
+    let mut conn = db.open().await.context("Open database")?;
+
+    let id = id.trim().to_lowercase();
+
+    if id == "all" {
+        conn.set_seen(None).await.context("Database: Set seen")?;
+    } else {
+        let id = id.parse().context("Parse feed-id number")?;
+        conn.set_seen(Some(id))
+            .await
+            .context("Database: Set seen")?;
+    }
+
+    Ok(())
+}
 
 // vim: ts=4 sw=4 expandtab

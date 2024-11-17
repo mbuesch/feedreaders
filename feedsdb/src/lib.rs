@@ -578,6 +578,33 @@ impl DbConn {
         .await
     }
 
+    pub async fn set_seen(&mut self, feed_id: Option<i64>) -> ah::Result<()> {
+        transaction(Arc::clone(&self.conn), move |t| {
+            if let Some(feed_id) = feed_id {
+                t.prepare_cached(
+                    "\
+                        UPDATE items \
+                        SET seen = TRUE \
+                        WHERE feed_id = ?\
+                    ",
+                )?
+                .execute([feed_id])?;
+            } else {
+                t.prepare_cached(
+                    "\
+                        UPDATE items \
+                        SET seen = TRUE \
+                    ",
+                )?
+                .execute([])?;
+            }
+
+            t.commit()?;
+            Ok(())
+        })
+        .await
+    }
+
     pub async fn check_item_exists(&mut self, item: &Item) -> ah::Result<ItemStatus> {
         if let Some(item_id) = item.item_id.as_ref() {
             let item_id = item_id.clone();
