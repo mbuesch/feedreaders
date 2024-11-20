@@ -589,11 +589,28 @@ impl DbConn {
                     ",
                 )?
                 .execute([feed_id])?;
+
+                t.prepare_cached(
+                    "\
+                        UPDATE feeds \
+                        SET updated_items = 0 \
+                        WHERE feed_id = ?\
+                    ",
+                )?
+                .execute([feed_id])?;
             } else {
                 t.prepare_cached(
                     "\
                         UPDATE items \
                         SET seen = TRUE \
+                    ",
+                )?
+                .execute([])?;
+
+                t.prepare_cached(
+                    "\
+                        UPDATE feeds \
+                        SET updated_items = 0 \
                     ",
                 )?
                 .execute([])?;
