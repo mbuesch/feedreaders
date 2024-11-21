@@ -1,4 +1,5 @@
 /*
+ * Copyright (C) 2024 Michael Büsch <m@bues.ch>
  * Copyright (C) 2020 Marco Lochen
  *
  * This program is free software: you can redistribute it and/or modify
@@ -60,6 +61,14 @@ body a {
     width: 100%;
 }
 
+.feed_title .new_items {
+    font-weight: bold;
+}
+
+.feed_title .disabled {
+    text-decoration: line-through;
+}
+
 .active_row {
     background: #444444;
 }
@@ -96,3 +105,4 @@ img {
     height: auto;
 }
 
+// vim: ts=4 sw=4 expandtab

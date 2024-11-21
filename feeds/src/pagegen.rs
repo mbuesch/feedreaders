@@ -71,13 +71,15 @@ async fn gen_feed_list(
             ""
         };
 
-        let mut classes = String::with_capacity(32);
-        wr!(&mut classes, "feed_title")?;
+        let mut classes = String::new();
         if feed.disabled {
-            wr!(&mut classes, " disabled")?;
+            wr!(&mut classes, "disabled")?;
         }
         if feed.updated_items > 0 {
-            wr!(&mut classes, " new_items")?;
+            if !classes.is_empty() {
+                wr!(&mut classes, " ")?;
+            }
+            wr!(&mut classes, "new_items")?;
         }
 
         let feed_id = feed.feed_id.expect("get_feeds() feed_id was None");
@@ -100,10 +102,13 @@ async fn gen_feed_list(
         ln!(b, r#"        <td>"#)?;
         ln!(b, r#"          <input name="del" value="{feed_id}" type="checkbox">"#)?;
         ln!(b, r#"        </td>"#)?;
-        ln!(b, r#"        <td class="{classes}">"#)?;
-        ln!(b, r#"          <a href="/cgi-bin/feeds?id={feed_id}">"#)?;
-        ln!(b, r#"            {title}{updated_items}"#)?;
-        ln!(b, r#"          </a>"#)?;
+        ln!(b, r#"        <td class="feed_title">"#)?;
+        ln!(b, r#"          <span class="{classes}">"#)?;
+        ln!(b, r#"            <a href="/cgi-bin/feeds?id={feed_id}">"#)?;
+        ln!(b, r#"              {title}"#)?;
+        ln!(b, r#"            </a>"#)?;
+        ln!(b, r#"          </span>"#)?;
+        ln!(b, r#"          {updated_items}"#)?;
         ln!(b, r#"        </td>"#)?;
         ln!(b, r#"      </tr>"#)?;
     }
