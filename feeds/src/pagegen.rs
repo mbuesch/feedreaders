@@ -134,7 +134,7 @@ async fn gen_item_list(
         .context("Database: Get feed items")?;
 
     ln!(b, r#"<div id="item_list">"#)?;
-    for (item, count) in items {
+    for (item, item_ext) in items {
         let item_id = item.item_id.as_ref().expect("get_feed_items() item_id was None");
         let link = escape(&item.link, 1024);
         let title = escape(&item.title, 256);
@@ -145,10 +145,13 @@ async fn gen_item_list(
         } else {
             format!("{} - ", escape(&item.author, 32))
         };
-        let new_marker = if item.seen { "" } else { "(NEW) " };
         let timestring = item.published.format("%Y-%m-%d %H:%M:%S");
+        let mut new_marker = if item.seen { "" } else { "(NEW) " };
         let mut history = String::new();
-        if count > 1 {
+        if item_ext.count > 1 {
+            if item_ext.any_seen && !item_ext.all_seen {
+                new_marker = "(updated) ";
+            }
             wr!(&mut history, r#"<a class="history" href="/cgi-bin/feeds?"#)?;
             wr!(&mut history, r#"id={feed_id}&itemid={item_id}">(history)</a>"#)?;
         }

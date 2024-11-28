@@ -110,8 +110,18 @@ impl Item {
         })
     }
 
-    fn from_sql_row_with_count(row: &Row<'_>) -> rusqlite::Result<(Self, i64)> {
-        Ok((Self::from_sql_row(row)?, row.get(10)?))
+    fn from_sql_row_extended(row: &Row<'_>) -> rusqlite::Result<(Self, ItemExt)> {
+        let count: i64 = row.get(10)?;
+        let max_seen: bool = row.get(11)?;
+        let sum_seen: i64 = row.get(12)?;
+        Ok((
+            Self::from_sql_row(row)?,
+            ItemExt {
+                count,
+                any_seen: max_seen,
+                all_seen: sum_seen == count,
+            },
+        ))
     }
 
     pub async fn make_id(&self) -> String {
@@ -124,6 +134,13 @@ impl Item {
         h.update(&self.summary);
         hex::encode(h.finalize())
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ItemExt {
+    pub count: i64,
+    pub any_seen: bool,
+    pub all_seen: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -507,21 +524,33 @@ impl DbConn {
         .await
     }
 
-    pub async fn get_feed_items(&mut self, feed_id: i64) -> ah::Result<Vec<(Item, i64)>> {
+    pub async fn get_feed_items(&mut self, feed_id: i64) -> ah::Result<Vec<(Item, ItemExt)>> {
         transaction(Arc::clone(&self.conn), move |t| {
-            let items: Vec<(Item, i64)> = t
+            let items: Vec<(Item, ItemExt)> = t
                 .prepare_cached(
                     "\
-                        SELECT item_id, feed_id, max(retrieved), seen, \
-                        author, title, feed_item_id, link, published, \
-                        summary, count() as count \
+                        SELECT \
+                            item_id, \
+                            feed_id, \
+                            max(retrieved), \
+                            seen, \
+                            author, \
+                            title, \
+                            feed_item_id, \
+                            link, \
+                            published, \
+                            summary, \
+                            count() as count, \
+                            max(seen) as any_seen, \
+                            sum(seen) as sum_seen \
                         FROM items \
                         WHERE feed_id = ? \
                         GROUP BY feed_item_id \
-                        ORDER BY published DESC LIMIT 100\
+                        ORDER BY published DESC \
+                        LIMIT 100\
                     ",
                 )?
-                .query_map([feed_id], Item::from_sql_row_with_count)?
+                .query_map([feed_id], Item::from_sql_row_extended)?
                 .map(|i| i.unwrap())
                 .collect();
 
