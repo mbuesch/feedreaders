@@ -49,6 +49,10 @@ fn escape(s: &str, maxlen: usize) -> String {
     html_escape::encode_safe(&snipped).into_owned()
 }
 
+fn escape_comment(s: &str) -> String {
+    s.replace("-->", "_->")
+}
+
 #[rustfmt::skip]
 async fn gen_feed_list(
     b: &mut String,
@@ -94,11 +98,9 @@ async fn gen_feed_list(
             "".to_string()
         };
 
-        let href = &feed.href;
-
         ln!(b, r#"      <tr{tr_class}>"#)?;
-        ln!(b, r#"        <!-- {title} -->"#)?;
-        ln!(b, r#"        <!-- {href} -->"#)?;
+        ln!(b, r#"        <!-- {} -->"#, escape_comment(&title))?;
+        ln!(b, r#"        <!-- {} -->"#, escape_comment(&feed.href))?;
         ln!(b, r#"        <td>"#)?;
         ln!(b, r#"          <input name="del" value="{feed_id}" type="checkbox">"#)?;
         ln!(b, r#"        </td>"#)?;
