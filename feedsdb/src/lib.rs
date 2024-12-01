@@ -546,8 +546,7 @@ impl DbConn {
                         FROM items \
                         WHERE feed_id = ? \
                         GROUP BY feed_item_id \
-                        ORDER BY published DESC \
-                        LIMIT 100\
+                        ORDER BY published DESC\
                     ",
                 )?
                 .query_map([feed_id], Item::from_sql_row_extended)?
