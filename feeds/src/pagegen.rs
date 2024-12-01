@@ -148,11 +148,11 @@ async fn gen_item_list(
             format!("{} - ", escape(&item.author, 32))
         };
         let timestring = item.published.format("%Y-%m-%d %H:%M:%S");
-        let mut new_marker = if item.seen { "" } else { "(NEW) " };
+        let mut new_marker = if item.seen { "" } else { "<b>(NEW)</b> " };
         let mut history = String::new();
         if item_ext.count > 1 {
             if item_ext.any_seen && !item_ext.all_seen {
-                new_marker = "(updated) ";
+                new_marker = "<b>(updated)</b> ";
             }
             wr!(&mut history, r#"<a class="history" href="/cgi-bin/feeds?"#)?;
             wr!(&mut history, r#"id={feed_id}&itemid={item_id}">(history)</a>"#)?;
