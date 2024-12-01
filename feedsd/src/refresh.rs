@@ -32,7 +32,7 @@ use tokio::{
 const NET_TIMEOUT: Duration = Duration::from_secs(10);
 const NET_CONCURRENCY: usize = 1; // no concurrency
 const REFRESH_SLACK: f64 = 0.1;
-const GC_AGE_OFFSET: Duration = Duration::from_secs(365 * 24 * 60 * 60); // 1 year
+const GC_AGE_OFFSET: Duration = Duration::from_secs((365 * 24 * 60 * 60) / 2); // 1/2 year
 const NOTIFY_ONLY_NEW_ITEMS: bool = true;
 
 fn rand_interval(refresh_interval: Duration, slack_rel: f64) -> Duration {
