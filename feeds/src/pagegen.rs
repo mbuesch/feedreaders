@@ -193,7 +193,7 @@ async fn gen_item_history_list(
         } else {
             format!("{} - ", escape(&item.author, 32))
         };
-        let timestring = item.published.format("%Y-%m-%d %H:%M:%S");
+        let timestring = item.retrieved.format("%Y-%m-%d %H:%M:%S");
 
         ln!(b, r#"  <div class="{classes}">"#)?;
         ln!(b, r#"    <a class="title" href="{link}">{author}{title}</a>"#)?;
