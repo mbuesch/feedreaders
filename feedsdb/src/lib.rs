@@ -378,7 +378,10 @@ impl DbConn {
                 t.prepare_cached(
                     "\
                         DELETE FROM items \
-                        WHERE feed_id = ? AND published < ? AND seen = TRUE\
+                        WHERE \
+                            feed_id = ? AND \
+                            published < ? AND \
+                            seen = TRUE\
                     ",
                 )?
                 .execute((feed_id, dt_to_sql(gc_thres)))?;
@@ -456,8 +459,9 @@ impl DbConn {
                 .prepare_cached(
                     "\
                         SELECT * FROM feeds \
-                        WHERE next_retrieval < ? AND \
-                              disabled == FALSE\
+                        WHERE \
+                            next_retrieval < ? AND \
+                            disabled == FALSE\
                     ",
                 )?
                 .query_map([dt_to_sql(&now)], Feed::from_sql_row)?
@@ -580,10 +584,12 @@ impl DbConn {
                 .prepare_cached(
                     "\
                         SELECT * FROM items \
-                        WHERE feed_id = ? AND feed_item_id IN (\
-                            SELECT feed_item_id FROM items \
-                            WHERE item_id = ?\
-                        ) \
+                        WHERE \
+                            feed_id = ? AND \
+                            feed_item_id IN (\
+                                SELECT feed_item_id FROM items \
+                                WHERE item_id = ?\
+                            ) \
                         ORDER BY retrieved DESC\
                     ",
                 )?
