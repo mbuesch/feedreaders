@@ -150,36 +150,28 @@ impl Cgi {
         };
 
         match &self.meth[..] {
-            m @ "GET" | m @ "HEAD" => {
-                if m == "HEAD" {
-                    match pagegen.get(&query, GetBody::No).await {
-                        Ok(res) => response_200_ok(None, &res.mime, &[], self.start_stamp),
-                        Err(e) => {
-                            if DEBUG {
-                                response_500_internal_error(&format!("{e:?}"));
-                            } else {
-                                response_500_internal_error("GET failed");
-                            }
-                        }
-                    }
-                } else {
-                    match pagegen.get(&query, GetBody::Yes).await {
-                        Ok(res) => response_200_ok(
-                            Some(res.body.as_bytes()),
-                            &res.mime,
-                            &[],
-                            self.start_stamp,
-                        ),
-                        Err(e) => {
-                            if DEBUG {
-                                response_500_internal_error(&format!("{e:?}"));
-                            } else {
-                                response_500_internal_error("GET failed");
-                            }
-                        }
+            "HEAD" => match pagegen.get(&query, GetBody::No).await {
+                Ok(res) => response_200_ok(None, &res.mime, &[], self.start_stamp),
+                Err(e) => {
+                    if DEBUG {
+                        response_500_internal_error(&format!("{e:?}"));
+                    } else {
+                        response_500_internal_error("HEAD failed");
                     }
                 }
-            }
+            },
+            "GET" => match pagegen.get(&query, GetBody::Yes).await {
+                Ok(res) => {
+                    response_200_ok(Some(res.body.as_bytes()), &res.mime, &[], self.start_stamp)
+                }
+                Err(e) => {
+                    if DEBUG {
+                        response_500_internal_error(&format!("{e:?}"));
+                    } else {
+                        response_500_internal_error("GET failed");
+                    }
+                }
+            },
             "POST" => {
                 if self.body_len == 0 {
                     response_400_bad_request("POST: CONTENT_LENGTH is zero.");
