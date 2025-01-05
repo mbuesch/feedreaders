@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 //
-// Copyright (C) 2024 Michael Büsch <m@bues.ch>
+// Copyright (C) 2024-2025 Michael Büsch <m@bues.ch>
 // Copyright (C) 2020 Marco Lochen
 //
 // This program is free software: you can redistribute it and/or modify
@@ -36,6 +36,9 @@ use tokio::task::spawn_blocking;
 
 pub const DEBUG: bool = true;
 const TIMEOUT: Duration = Duration::from_millis(10_000);
+
+// Keys for the global kv_int_int key-value store.
+const KV_KEY_FEED_UPDATE_REV: i64 = 1;
 
 pub fn get_prefix() -> PathBuf {
     option_env!("FEEDREADER_PREFIX").unwrap_or("/").into()
@@ -242,6 +245,7 @@ impl DbConn {
     #[rustfmt::skip]
     pub async fn init(&mut self) -> ah::Result<()> {
         transaction(Arc::clone(&self.conn), move |t| {
+            // Feeds table.
             t.execute(
                 "\
                     CREATE TABLE IF NOT EXISTS feeds (\
@@ -256,6 +260,7 @@ impl DbConn {
                     )",
                 [],
             )?;
+            // Items table.
             t.execute(
                 "\
                     CREATE TABLE IF NOT EXISTS items (\
@@ -273,8 +278,20 @@ impl DbConn {
                     )",
                 [],
             )?;
+            // Global key-value store for integer keys and integer values.
+            t.execute(
+                "\
+                    CREATE TABLE IF NOT EXISTS kv_int_int (\
+                        key INTEGER PRIMARY KEY, \
+                        value INTEGER
+                    )",
+                [],
+            )?;
+
+            // Create indices.
             t.execute("CREATE INDEX IF NOT EXISTS feed_id ON feeds(feed_id)", [])?;
             t.execute("CREATE INDEX IF NOT EXISTS item_id ON items(item_id)", [])?;
+            t.execute("CREATE INDEX IF NOT EXISTS kv_int_int_key ON kv_int_int(key)", [])?;
 
             // Remove legacy table.
             t.execute("DROP TABLE IF EXISTS enclosures", [])?;
@@ -288,6 +305,15 @@ impl DbConn {
                     )\
                 ",
                 []
+            )?;
+
+            // Initialize feed update revision counter.
+            t.execute(
+                "\
+                    INSERT OR IGNORE INTO kv_int_int \
+                    VALUES(?, ?)\
+                ",
+                [ KV_KEY_FEED_UPDATE_REV, 1 ]
             )?;
 
             t.commit()?;
@@ -308,11 +334,33 @@ impl DbConn {
         .await?
     }
 
+    async fn get_kv_int_int(&mut self, key: i64) -> ah::Result<i64> {
+        transaction(Arc::clone(&self.conn), move |t| {
+            let rev: i64 = t
+                .prepare_cached(
+                    "\
+                        SELECT value FROM kv_int_int \
+                        WHERE \
+                            key = ?\
+                    ",
+                )?
+                .query([key])?
+                .next()?
+                .unwrap()
+                .get(0)?;
+
+            t.finish()?;
+            Ok(rev)
+        })
+        .await
+    }
+
     pub async fn update_feed(
         &mut self,
         feed: &Feed,
         items: &[Item],
         gc_thres: Option<DateTime<Utc>>,
+        increment_update_revision: bool,
     ) -> ah::Result<()> {
         let feed = feed.clone();
         let items = items.to_vec();
@@ -387,10 +435,26 @@ impl DbConn {
                 .execute((feed_id, dt_to_sql(gc_thres)))?;
             }
 
+            // Increment the feed update revision counter.
+            if increment_update_revision {
+                t.prepare_cached(
+                    "\
+                        UPDATE kv_int_int SET \
+                            value = value + 1 \
+                        WHERE key = ?\
+                    ",
+                )?
+                .execute([KV_KEY_FEED_UPDATE_REV])?;
+            }
+
             t.commit()?;
             Ok(())
         })
         .await
+    }
+
+    pub async fn get_feed_update_revision(&mut self) -> ah::Result<i64> {
+        self.get_kv_int_int(KV_KEY_FEED_UPDATE_REV).await
     }
 
     pub async fn add_feed(&mut self, href: &str) -> ah::Result<()> {

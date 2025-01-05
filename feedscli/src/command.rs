@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 //
-// Copyright (C) 2024 Michael Büsch <m@bues.ch>
+// Copyright (C) 2024-2025 Michael Büsch <m@bues.ch>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+pub mod getkv;
 pub mod list;
 pub mod seen;
 

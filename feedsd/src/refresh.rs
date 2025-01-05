@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 //
-// Copyright (C) 2024 Michael Büsch <m@bues.ch>
+// Copyright (C) 2024-2025 Michael Büsch <m@bues.ch>
 // Copyright (C) 2020 Marco Lochen
 //
 // This program is free software: you can redistribute it and/or modify
@@ -221,7 +221,7 @@ async fn refresh_feed(
                 db.open()
                     .await
                     .context("Open database")?
-                    .update_feed(&feed, &[], None)
+                    .update_feed(&feed, &[], None, true)
                     .await
                     .context("Update feed")?;
                 return Ok(());
@@ -231,7 +231,7 @@ async fn refresh_feed(
                 db.open()
                     .await
                     .context("Open database")?
-                    .update_feed(&feed, &[], None)
+                    .update_feed(&feed, &[], None, true)
                     .await
                     .context("Update feed")?;
                 return Ok(());
@@ -249,18 +249,23 @@ async fn refresh_feed(
     feed.last_retrieval = now;
     feed.next_retrieval = next_retrieval;
 
+    let mut increment_update_revision = false;
     if !items.is_empty() {
         feed.last_activity = now;
         if NOTIFY_ONLY_NEW_ITEMS {
             feed.updated_items += new_items_count;
+            if new_items_count > 0 {
+                increment_update_revision = true;
+            }
         } else {
             feed.updated_items += items.len() as i64;
+            increment_update_revision = true;
         }
     }
 
     let gc_thres = oldest - GC_AGE_OFFSET;
 
-    conn.update_feed(&feed, &items, Some(gc_thres))
+    conn.update_feed(&feed, &items, Some(gc_thres), increment_update_revision)
         .await
         .context("Update feed")?;
 

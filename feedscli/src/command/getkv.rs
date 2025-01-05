@@ -17,36 +17,21 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::GetKv;
 use anyhow::{self as ah, Context as _};
-use nix::{
-    sys::signal::{kill, Signal},
-    unistd::Pid,
-};
-use tokio::fs::read_to_string;
+use feedsdb::Db;
 
-/// Get the PID of the `feedsd` daemon process.
-async fn get_feedsd_pid() -> ah::Result<Pid> {
-    let pid = read_to_string("/run/feedsd/feedsd.pid")
-        .await
-        .context("Read PID-file of 'feedsd' daemon")?;
-    let pid: i32 = pid
-        .trim()
-        .parse()
-        .context("Parse 'feedsd' PID-file string to number")?;
-    Ok(Pid::from_raw(pid))
-}
+pub async fn command_getkv(db: &Db, key: &GetKv) -> ah::Result<()> {
+    let mut conn = db.open().await.context("Open database")?;
 
-pub async fn wakeup_feedsd() {
-    let pid = match get_feedsd_pid().await {
-        Ok(pid) => pid,
-        Err(e) => {
-            eprintln!("Failed to get feedsd pid: {e:?}");
-            return;
+    match key {
+        GetKv::FeedUpdateRev => {
+            let rev = conn.get_feed_update_revision().await?;
+            println!("{rev}");
         }
-    };
-    if let Err(e) = kill(pid, Signal::SIGHUP) {
-        eprintln!("Failed to send SIGHUP to feedsd: {e:?}");
     }
+
+    Ok(())
 }
 
 // vim: ts=4 sw=4 expandtab

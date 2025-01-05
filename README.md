@@ -121,7 +121,7 @@ If you don't know what this means, please ask your favorite search engine before
 
 # License / Copyright
 
-Copyright (C) 2024 Michael Büsch
+Copyright (C) 2024-2025 Michael Büsch
 
 Copyright (C) 2020 Marco Lochen
 

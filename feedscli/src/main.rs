@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 //
-// Copyright (C) 2024 Michael Büsch <m@bues.ch>
+// Copyright (C) 2024-2025 Michael Büsch <m@bues.ch>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
 
 mod command;
 
-use crate::command::{list::command_list, seen::command_seen};
+use crate::command::{getkv::command_getkv, list::command_list, seen::command_seen};
 use anyhow::{self as ah, Context as _};
 use clap::{Parser, Subcommand};
 use feedsdb::Db;
@@ -53,6 +53,15 @@ enum Command {
         /// Or alternatively "all" to set all feeds to seen.
         id: String,
     },
+
+    /// Get a value from the key-value-store.
+    #[command(subcommand)]
+    GetKv(GetKv),
+}
+
+#[derive(Subcommand, Debug, Clone, Copy)]
+enum GetKv {
+    FeedUpdateRev,
 }
 
 async fn async_main(opts: Opts) -> ah::Result<()> {
@@ -63,6 +72,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
     match &opts.command {
         Command::List => command_list(&db).await,
         Command::Seen { id } => command_seen(&db, id).await,
+        Command::GetKv(kv) => command_getkv(&db, kv).await,
     }
 }
 
