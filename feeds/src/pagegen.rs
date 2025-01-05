@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 //
-// Copyright (C) 2024 Michael Büsch <m@bues.ch>
+// Copyright (C) 2024-2025 Michael Büsch <m@bues.ch>
 // Copyright (C) 2020 Marco Lochen
 //
 // This program is free software: you can redistribute it and/or modify
@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::{formfields::FormFields, query::Query, wakeup::wakeup_feedsd};
-use anyhow::{self as ah, Context as _};
+use anyhow::{self as ah, format_err as err, Context as _};
 use feedsdb::{Db, DbConn};
 use std::{fmt::Write as _, write as wr, writeln as ln};
 
@@ -284,39 +284,55 @@ impl<'a> PageGen<'a> {
         Ok(Self { db })
     }
 
-    pub async fn get(&mut self, query: &Query, get_body: GetBody) -> ah::Result<PageGenResult> {
-        let body = match get_body {
-            GetBody::Yes => {
-                let mut body = String::with_capacity(BODY_PREALLOC);
-                let mut conn = self.db.open().await.context("Open database")?;
-                gen_page(&mut body, &mut conn, query, None)
-                    .await
-                    .context("Generate page (GET)")?;
-                body
-            }
-            GetBody::No => "".to_string(),
-        };
+    pub async fn get(
+        &mut self,
+        path: &str,
+        query: &Query,
+        get_body: GetBody,
+    ) -> ah::Result<PageGenResult> {
+        match path {
+            "" | "/" | "/index.htm" | "/index.html" => {
+                let body = match get_body {
+                    GetBody::Yes => {
+                        let mut body = String::with_capacity(BODY_PREALLOC);
+                        let mut conn = self.db.open().await.context("Open database")?;
+                        gen_page(&mut body, &mut conn, query, None)
+                            .await
+                            .context("Generate page (GET)")?;
+                        body
+                    }
+                    GetBody::No => "".to_string(),
+                };
 
-        Ok(PageGenResult {
-            body,
-            mime: MIME.to_string(),
-        })
+                Ok(PageGenResult {
+                    body,
+                    mime: MIME.to_string(),
+                })
+            }
+            path => Err(err!("Path '{path}' is not supported.")),
+        }
     }
 
     pub async fn post(
         &mut self,
+        path: &str,
         query: &Query,
         formfields: &FormFields,
     ) -> ah::Result<PageGenResult> {
-        let mut body = String::with_capacity(BODY_PREALLOC);
-        let mut conn = self.db.open().await.context("Open database")?;
-        gen_page(&mut body, &mut conn, query, Some(formfields))
-            .await
-            .context("Generate page (POST)")?;
-        Ok(PageGenResult {
-            body,
-            mime: MIME.to_string(),
-        })
+        match path {
+            "" | "/" | "/index.htm" | "/index.html" => {
+                let mut body = String::with_capacity(BODY_PREALLOC);
+                let mut conn = self.db.open().await.context("Open database")?;
+                gen_page(&mut body, &mut conn, query, Some(formfields))
+                    .await
+                    .context("Generate page (POST)")?;
+                Ok(PageGenResult {
+                    body,
+                    mime: MIME.to_string(),
+                })
+            }
+            path => Err(err!("Path '{path}' is not supported.")),
+        }
     }
 }
 

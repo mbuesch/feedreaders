@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 //
-// Copyright (C) 2024 Michael Büsch <m@bues.ch>
+// Copyright (C) 2024-2025 Michael Büsch <m@bues.ch>
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -111,7 +111,7 @@ fn response_500_internal_error(err: &str) {
 pub struct Cgi {
     query: String,
     meth: String,
-    _path: String,
+    path: String,
     body_len: u32,
     body_type: String,
     _host: String,
@@ -134,7 +134,7 @@ impl Cgi {
         Ok(Self {
             query,
             meth,
-            _path: path,
+            path,
             body_len,
             body_type,
             _host: host,
@@ -150,7 +150,7 @@ impl Cgi {
         };
 
         match &self.meth[..] {
-            "HEAD" => match pagegen.get(&query, GetBody::No).await {
+            "HEAD" => match pagegen.get(&self.path, &query, GetBody::No).await {
                 Ok(res) => response_200_ok(None, &res.mime, &[], self.start_stamp),
                 Err(e) => {
                     if DEBUG {
@@ -160,7 +160,7 @@ impl Cgi {
                     }
                 }
             },
-            "GET" => match pagegen.get(&query, GetBody::Yes).await {
+            "GET" => match pagegen.get(&self.path, &query, GetBody::Yes).await {
                 Ok(res) => {
                     response_200_ok(Some(res.body.as_bytes()), &res.mime, &[], self.start_stamp)
                 }
@@ -197,7 +197,7 @@ impl Cgi {
                     return;
                 };
 
-                match pagegen.post(&query, &formfields).await {
+                match pagegen.post(&self.path, &query, &formfields).await {
                     Ok(res) => {
                         response_200_ok(Some(res.body.as_bytes()), &res.mime, &[], self.start_stamp)
                     }
