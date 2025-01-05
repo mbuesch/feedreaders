@@ -104,6 +104,21 @@ ScriptAlias /cgi-bin/feeds /opt/feedreader/lib/cgi-bin/feeds
 </Directory>
 ```
 
+# Security
+
+This software does not implement any authentication and/or encryption.
+
+It is expected that all users which have access to the server's cgi interface are trusted.
+
+WARNING:
+
+If you want to run this cgi on a publicly accessible server, please remember to enable encryption (TLS, https) and access authentication (e.g. http auth) in the server (e.g. lighttpd or apache).
+If you don't do this, then people will destroy your database or possibly use it to distribute illegal material.
+
+Running this cgi behind a https+auth barrier is fine and there's no problem with that.
+
+If you don't know what this means, please ask your favorite search engine before setting up a web server.
+
 # License / Copyright
 
 Copyright (C) 2024 Michael Büsch
