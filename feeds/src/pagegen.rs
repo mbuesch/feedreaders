@@ -25,6 +25,7 @@ use std::{fmt::Write as _, write as wr, writeln as ln};
 
 const MIME: &str = "text/html";
 const BODY_PREALLOC: usize = 1024 * 1024;
+const STATIC_JS: &str = include_str!("pagegen_static.js");
 
 fn floor_char_boundary(s: &str, mut i: usize) -> usize {
     if i >= s.len() {
@@ -62,6 +63,11 @@ async fn gen_feed_list(
     let feeds = conn.get_feeds(active_feed_id).await
         .context("Database: Get feeds")?;
 
+    if !STATIC_JS.trim().is_empty() {
+        ln!(b, r#"<script type="text/javascript">"#)?;
+        ln!(b, "{}", STATIC_JS.trim())?;
+        ln!(b, r#"</script>"#)?;
+    }
     ln!(b, r#"<div id="feed_list">"#)?;
     ln!(b, r#"  <form method="post" enctype="multipart/form-data">"#)?;
     ln!(b, r#"    <table align="center" id="feed_table">"#)?;
