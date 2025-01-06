@@ -20,12 +20,13 @@
 
 use crate::{formfields::FormFields, query::Query, wakeup::wakeup_feedsd};
 use anyhow::{self as ah, format_err as err, Context as _};
-use feedsdb::{Db, DbConn};
+use feedsdb::{Db, DbConn, FeedsExt};
 use std::{fmt::Write as _, write as wr, writeln as ln};
 
-const MIME: &str = "text/html";
+const MIME_TEXT: &str = "text/plain";
+const MIME_HTML: &str = "text/html";
 const BODY_PREALLOC: usize = 1024 * 1024;
-const STATIC_JS: &str = include_str!("pagegen_static.js");
+const TEMPLATE_JS: &str = include_str!("pagegen_template.js");
 
 fn floor_char_boundary(s: &str, mut i: usize) -> usize {
     if i >= s.len() {
@@ -59,20 +60,17 @@ async fn gen_feed_list(
     b: &mut String,
     conn: &mut DbConn,
     active_feed_id: Option<i64>,
-) -> ah::Result<()> {
-    let feeds = conn.get_feeds(active_feed_id).await
+) -> ah::Result<FeedsExt> {
+    let (feeds, feeds_ext) = conn.get_feeds(active_feed_id).await
         .context("Database: Get feeds")?;
 
-    if !STATIC_JS.trim().is_empty() {
-        ln!(b, r#"<script type="text/javascript">"#)?;
-        ln!(b, "{}", STATIC_JS.trim())?;
-        ln!(b, r#"</script>"#)?;
-    }
     ln!(b, r#"<div id="feed_list">"#)?;
     ln!(b, r#"  <form method="post" enctype="multipart/form-data">"#)?;
     ln!(b, r#"    <table align="center" id="feed_table">"#)?;
     ln!(b, r#"      <tr>"#)?;
-    ln!(b, r#"        <th colspan="2"><a href="/cgi-bin/feeds">feeds</a></th>"#)?;
+    ln!(b, r#"        <th colspan="2" id="feed_list_th">"#)?;
+    ln!(b, r#"          <a href="/cgi-bin/feeds" id="feed_list_th_a">feeds</a>"#)?;
+    ln!(b, r#"        </th>"#)?;
     ln!(b, r#"      </tr>"#)?;
     for feed in feeds {
         let tr_class = if feed.feed_id == active_feed_id {
@@ -129,7 +127,7 @@ async fn gen_feed_list(
     ln!(b, r#"    <input type="submit" class="button" value="add">"#)?;
     ln!(b, r#"  </form>"#)?;
     ln!(b, r#"</div>"#)?;
-    Ok(())
+    Ok(feeds_ext)
 }
 
 #[rustfmt::skip]
@@ -249,7 +247,7 @@ async fn gen_page(
     let feed_id = query.get_i64("id");
     let item_id = query.get("itemid");
 
-    gen_feed_list(b, conn, feed_id).await?;
+    let feeds_ext = gen_feed_list(b, conn, feed_id).await?;
 
     if let Some(feed_id) = feed_id {
         if let Some(item_id) = &item_id {
@@ -258,6 +256,13 @@ async fn gen_page(
             gen_item_list(b, conn, feed_id).await?;
         }
     }
+
+    ln!(b, r#"<script type="text/javascript">"#)?;
+    ln!(b, "{}", TEMPLATE_JS.trim())?;
+    ln!(b, r#"</script>"#)?;
+    let rev_static = feeds_ext.feed_update_revision & i32::MAX as i64;
+    ln!(b, r#"<div hidden id="feed_update_revision_dynamic">none</div>"#)?;
+    ln!(b, r#"<div hidden id="feed_update_revision_static">{rev_static}</div>"#)?;
 
     ln!(b, r#"</body>"#)?;
     ln!(b, r#"</html>"#)?;
@@ -312,7 +317,22 @@ impl<'a> PageGen<'a> {
 
                 Ok(PageGenResult {
                     body,
-                    mime: MIME.to_string(),
+                    mime: MIME_HTML.to_string(),
+                })
+            }
+            "/feed_update_rev" => {
+                let body = match get_body {
+                    GetBody::Yes => {
+                        let mut conn = self.db.open().await.context("Open database")?;
+                        let rev = conn.get_feed_update_revision().await?;
+                        format!("{}", rev)
+                    }
+                    GetBody::No => "".to_string(),
+                };
+
+                Ok(PageGenResult {
+                    body,
+                    mime: MIME_TEXT.to_string(),
                 })
             }
             path => Err(err!("Path '{path}' is not supported.")),
@@ -334,7 +354,7 @@ impl<'a> PageGen<'a> {
                     .context("Generate page (POST)")?;
                 Ok(PageGenResult {
                     body,
-                    mime: MIME.to_string(),
+                    mime: MIME_HTML.to_string(),
                 })
             }
             path => Err(err!("Path '{path}' is not supported.")),

@@ -84,6 +84,11 @@ impl Feed {
 }
 
 #[derive(Clone, Debug)]
+pub struct FeedsExt {
+    pub feed_update_revision: i64,
+}
+
+#[derive(Clone, Debug)]
 pub struct Item {
     pub item_id: Option<String>,
     pub feed_id: Option<i64>,
@@ -558,7 +563,10 @@ impl DbConn {
         .await
     }
 
-    pub async fn get_feeds(&mut self, active_feed_id: Option<i64>) -> ah::Result<Vec<Feed>> {
+    pub async fn get_feeds(
+        &mut self,
+        active_feed_id: Option<i64>,
+    ) -> ah::Result<(Vec<Feed>, FeedsExt)> {
         transaction(Arc::clone(&self.conn), move |t| {
             if let Some(active_feed_id) = active_feed_id {
                 t.prepare_cached(
@@ -582,12 +590,28 @@ impl DbConn {
                 .map(|f| f.unwrap())
                 .collect();
 
+            let rev: i64 = t
+                .prepare_cached(
+                    "\
+                        SELECT value FROM kv_int_int \
+                        WHERE \
+                            key = ?\
+                    ",
+                )?
+                .query([KV_KEY_FEED_UPDATE_REV])?
+                .next()?
+                .unwrap()
+                .get(0)?;
+            let feeds_ext = FeedsExt {
+                feed_update_revision: rev,
+            };
+
             if active_feed_id.is_some() {
                 t.commit()?;
             } else {
                 t.finish()?;
             }
-            Ok(feeds)
+            Ok((feeds, feeds_ext))
         })
         .await
     }

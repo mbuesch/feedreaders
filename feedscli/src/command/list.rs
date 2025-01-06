@@ -21,7 +21,7 @@ use anyhow::{self as ah, Context as _};
 use feedsdb::Db;
 
 pub async fn command_list(db: &Db) -> ah::Result<()> {
-    let mut feeds = db
+    let (mut feeds, _) = db
         .open()
         .await
         .context("Open database")?
