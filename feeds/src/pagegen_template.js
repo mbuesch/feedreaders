@@ -12,11 +12,10 @@ function send_feed_update_rev_request() {
         if (feed_update_rev_request.readyState == 4) { // Done
             var elem_rev_static = document.getElementById("feed_update_revision_static");
             var elem_rev_dynamic = document.getElementById("feed_update_revision_dynamic");
-            var elem_feed_list_th = document.getElementById("feed_list_th");
             var elem_feed_list_th_a = document.getElementById("feed_list_th_a");
             var again = false;
 
-            if (elem_rev_static && elem_rev_dynamic && elem_feed_list_th && elem_feed_list_th_a) {
+            if (elem_rev_static && elem_rev_dynamic && elem_feed_list_th_a) {
                 if (feed_update_rev_request.status == 200) { // Ok
                     elem_rev_dynamic.textContent = feed_update_rev_request.responseText;
                     var feed_update_rev_dynamic = parseInt(elem_rev_dynamic.textContent);
@@ -26,8 +25,8 @@ function send_feed_update_rev_request() {
                         again = true;
                     } else {
                         elem_feed_list_th_a.textContent += " (UPDATES AVAILABLE)";
-                        elem_feed_list_th.style.color = "red";
-                        elem_feed_list_th.style.fontWeight = "bold";
+                        elem_feed_list_th_a.style.color = "red";
+                        elem_feed_list_th_a.style.fontWeight = "bold";
                     }
                 } else {
                     again = true;
