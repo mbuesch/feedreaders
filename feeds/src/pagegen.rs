@@ -325,7 +325,7 @@ impl<'a> PageGen<'a> {
                     GetBody::Yes => {
                         let mut conn = self.db.open().await.context("Open database")?;
                         let rev = conn.get_feed_update_revision().await?;
-                        format!("{}", rev)
+                        format!("{}", rev & i32::MAX as i64)
                     }
                     GetBody::No => "".to_string(),
                 };
