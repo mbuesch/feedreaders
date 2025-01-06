@@ -68,8 +68,11 @@ async fn gen_feed_list(
     ln!(b, r#"  <form method="post" enctype="multipart/form-data">"#)?;
     ln!(b, r#"    <table align="center" id="feed_table">"#)?;
     ln!(b, r#"      <tr>"#)?;
-    ln!(b, r#"        <th colspan="2" id="feed_list_th">"#)?;
-    ln!(b, r#"          <a href="/cgi-bin/feeds" id="feed_list_th_a">feeds</a>"#)?;
+    ln!(b, r#"        <th colspan="2">"#)?;
+    ln!(b, r#"          <a href="/cgi-bin/feeds">"#)?;
+    ln!(b, r#"            <div id="feed_table_head">feeds</div>"#)?;
+    ln!(b, r#"            <div id="feed_table_head_ext" hidden></div>"#)?;
+    ln!(b, r#"          </a>"#)?;
     ln!(b, r#"        </th>"#)?;
     ln!(b, r#"      </tr>"#)?;
     for feed in feeds {
@@ -257,12 +260,12 @@ async fn gen_page(
         }
     }
 
+    let rev_static = feeds_ext.feed_update_revision & i32::MAX as i64;
+    ln!(b, r#"<div hidden id="feed_update_revision_dynamic">NaN</div>"#)?;
+    ln!(b, r#"<div hidden id="feed_update_revision_static">{rev_static}</div>"#)?;
     ln!(b, r#"<script type="text/javascript">"#)?;
     ln!(b, "{}", TEMPLATE_JS.trim())?;
     ln!(b, r#"</script>"#)?;
-    let rev_static = feeds_ext.feed_update_revision & i32::MAX as i64;
-    ln!(b, r#"<div hidden id="feed_update_revision_dynamic">none</div>"#)?;
-    ln!(b, r#"<div hidden id="feed_update_revision_static">{rev_static}</div>"#)?;
 
     ln!(b, r#"</body>"#)?;
     ln!(b, r#"</html>"#)?;

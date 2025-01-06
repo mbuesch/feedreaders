@@ -48,6 +48,14 @@ body a {
     border: 0px;
 }
 
+#feed_table_head {
+    display: inline-block;
+}
+
+#feed_table_head_ext {
+    display: inline-block;
+}
+
 #feed_list a {
     color: #FFFFFF;
     text-decoration: none;
