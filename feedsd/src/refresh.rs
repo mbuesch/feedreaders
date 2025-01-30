@@ -22,7 +22,7 @@ use anyhow::{self as ah, format_err as err, Context as _};
 use chrono::{DateTime, Utc};
 use feed_rs::model::Feed as ParsedFeed;
 use feedsdb::{Db, DbConn, Feed, Item, ItemStatus, DEBUG};
-use rand::{thread_rng, Rng as _};
+use rand::{prelude::*, rng};
 use std::{sync::Arc, time::Duration};
 use tokio::{
     sync::Semaphore,
@@ -39,7 +39,7 @@ fn rand_interval(refresh_interval: Duration, slack_rel: f64) -> Duration {
     let slack = (refresh_interval.as_millis() as f64 * slack_rel) as u64;
     let a = refresh_interval.as_millis() as u64 - (slack / 2);
     let b = refresh_interval.as_millis() as u64 + (slack / 2);
-    Duration::from_millis(thread_rng().gen_range(a..b))
+    Duration::from_millis(rng().random_range(a..b))
 }
 
 enum FeedResult {
