@@ -133,7 +133,7 @@ async fn get_items(
             *updated
         } else if feed_item_id.contains("blog.fefe.de") {
             // Fefe-workaround :-/
-            let Some(fefeid) = feed_item_id.split('=').last() else {
+            let Some(fefeid) = feed_item_id.split('=').next_back() else {
                 continue;
             };
             let Ok(fefeid) = i64::from_str_radix(fefeid, 16) else {
