@@ -92,11 +92,13 @@ async fn get_feed(href: &str) -> ah::Result<FeedResult> {
 
     let feed = task::spawn_blocking(move || -> ah::Result<Box<ParsedFeed>> {
         let parser = parser::Builder::new().build();
-        let parsed_feed = Box::new(parser.parse(&*feed_bytes)?);
-        Ok(parsed_feed)
+        Ok(parser.parse(&*feed_bytes).map(Box::new)?)
     })
-    .await
-    .context("Parse feed")??;
+    .await?;
+
+    let feed = feed.map_err(|e| err!("Failed to parse feed '{href}': {e}"))?;
+
+    //TODO: If a feed fails to parse too often, disable it.
 
     Ok(FeedResult::Feed(feed))
 }
