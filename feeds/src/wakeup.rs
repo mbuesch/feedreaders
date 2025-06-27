@@ -19,7 +19,7 @@
 
 use anyhow::{self as ah, Context as _};
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use tokio::fs::read_to_string;

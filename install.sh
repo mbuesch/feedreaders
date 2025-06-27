@@ -104,6 +104,23 @@ install_dirs()
     do_install \
         -o root -g root -m 0755 \
         -d /opt/feedreader/share/feedreader
+
+    do_install \
+        -o root -g root -m 0755 \
+        -d /opt/feedreader/etc/feedreader
+}
+
+install_conf()
+{
+    if [ -e /opt/feedreader/etc/feedreader/feedreader.conf ]; then
+        do_chown root:root /opt/feedreader/etc/feedreader/feedreader.conf
+        do_chmod 0644 /opt/feedreader/etc/feedreader/feedreader.conf
+    else
+        do_install \
+            -o root -g root -m 0644 \
+            "$basedir/feedreader.conf" \
+            /opt/feedreader/etc/feedreader/feedreader.conf
+    fi
 }
 
 install_feedsd()
@@ -167,6 +184,7 @@ target="$basedir/target/$release"
 entry_checks
 stop_services
 install_dirs
+install_conf
 install_feedsd
 install_feeds
 install_feedscli

@@ -23,7 +23,7 @@
 mod error;
 
 use crate::error::Error;
-use anyhow::{self as ah, format_err as err, Context as _};
+use anyhow::{self as ah, Context as _, format_err as err};
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OpenFlags, Row};
 use sha2::{Digest as _, Sha256};

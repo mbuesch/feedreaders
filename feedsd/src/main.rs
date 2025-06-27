@@ -23,13 +23,14 @@ mod refresh;
 mod systemd;
 
 use crate::{refresh::refresh_feeds, systemd::systemd_notify_ready};
-use anyhow::{self as ah, format_err as err, Context as _};
+use anyhow::{self as ah, Context as _, format_err as err};
 use clap::Parser;
-use feedsdb::{Db, DEBUG};
+use feedscfg::Config;
+use feedsdb::{DEBUG, Db};
 use std::{fs::OpenOptions, io::Write as _, num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     runtime,
-    signal::unix::{signal, SignalKind},
+    signal::unix::{SignalKind, signal},
     sync, task,
 };
 
@@ -71,11 +72,11 @@ impl Opts {
 }
 
 #[must_use]
-async fn do_refresh(db: Arc<Db>, opts: &Opts) -> (bool, Duration) {
+async fn do_refresh(db: Arc<Db>, opts: &Opts, config: Arc<Config>) -> (bool, Duration) {
     if DEBUG {
         eprintln!("Refreshing...");
     }
-    match refresh_feeds(db, opts.refresh_interval()).await {
+    match refresh_feeds(config, db, opts.refresh_interval()).await {
         Err(e) => {
             eprintln!("ERROR: {e:?}");
             (false, Duration::from_secs(60))
@@ -91,6 +92,7 @@ async fn do_refresh(db: Arc<Db>, opts: &Opts) -> (bool, Duration) {
 
 async fn async_main(opts: Opts) -> ah::Result<()> {
     let opts = Arc::new(opts);
+    let config = Arc::new(Config::parse_default_file().context("Parse configuration file")?);
 
     // Create pid-file in /run.
     if !opts.no_pidfile {
@@ -131,11 +133,12 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
     task::spawn({
         let db = Arc::clone(&db);
         let opts = Arc::clone(&opts);
+        let config = Arc::clone(&config);
 
         async move {
             let mut err_count = 0_u32;
             loop {
-                let (ok, sleep_dur) = do_refresh(Arc::clone(&db), &opts).await;
+                let (ok, sleep_dur) = do_refresh(Arc::clone(&db), &opts, Arc::clone(&config)).await;
                 if ok {
                     err_count = err_count.saturating_sub(1);
                 } else {
@@ -166,7 +169,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
             }
             _ = sighup.recv() => {
                 println!("SIGHUP: Triggering database refresh.");
-                let _ = do_refresh(Arc::clone(&db), &opts).await;
+                let _ = do_refresh(Arc::clone(&db), &opts, Arc::clone(&config)).await;
             }
             code = exit_sock_rx.recv() => {
                 exitcode = code.unwrap_or_else(|| Err(err!("Unknown error code.")));

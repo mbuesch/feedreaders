@@ -19,7 +19,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use crate::{formfields::FormFields, query::Query, wakeup::wakeup_feedsd};
-use anyhow::{self as ah, format_err as err, Context as _};
+use anyhow::{self as ah, Context as _, format_err as err};
 use feedsdb::{Db, DbConn, FeedsExt};
 use std::{fmt::Write as _, write as wr, writeln as ln};
 

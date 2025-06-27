@@ -3,6 +3,7 @@
 [workspace]
 members = [
     "feeds",
+    "feedscfg",
     "feedscli",
     "feedsd",
     "feedsdb",
@@ -12,7 +13,7 @@ resolver = "3"
 [workspace.package]
 version = "1.0.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "GPL-2.0-or-later"
 authors = [ "Michael Büsch <m@bues.ch>", "Marco Lochen" ]
 homepage = "https://bues.ch/"
@@ -33,12 +34,15 @@ multer = "3"
 nix = { version = "0.30", default-features = false }
 querystrong = "0.3"
 rand = "0.9"
+regex = "1"
 reqwest = { version = "0.12", default-features = false }
 rusqlite = "0.36"
 sd-notify = "0.4"
 sha2 = "0.10"
 tokio = "1"
+toml = "0.8"
 
+feedscfg = { version = "1", path = "./feedscfg" }
 feedsdb = { version = "1", path = "./feedsdb" }
 
 [profile.dev]

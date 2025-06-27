@@ -18,10 +18,11 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use anyhow::{self as ah, format_err as err, Context as _};
+use anyhow::{self as ah, Context as _, format_err as err};
 use chrono::{DateTime, Utc};
 use feed_rs::model::Feed as ParsedFeed;
-use feedsdb::{Db, DbConn, Feed, Item, ItemStatus, DEBUG};
+use feedscfg::Config;
+use feedsdb::{DEBUG, Db, DbConn, Feed, Item, ItemStatus};
 use rand::{prelude::*, rng};
 use std::{sync::Arc, time::Duration};
 use tokio::{
@@ -29,6 +30,7 @@ use tokio::{
     task::{self, JoinSet},
 };
 
+//TODO move this stuff to the configuration file.
 const NET_TIMEOUT: Duration = Duration::from_secs(10);
 const NET_CONCURRENCY: usize = 1; // no concurrency
 const REFRESH_SLACK: f64 = 0.1;
@@ -103,14 +105,31 @@ async fn get_feed(href: &str) -> ah::Result<FeedResult> {
     Ok(FeedResult::Feed(feed))
 }
 
+fn should_highlight(config: &Config, item: &Item) -> bool {
+    !(config
+        .title_deny_highlighting
+        .iter()
+        .any(|re| re.is_match(&item.title))
+        || config
+            .summary_deny_highlighting
+            .iter()
+            .any(|re| re.is_match(&item.summary)))
+}
+
+struct FilteredItem {
+    item: Item,
+    status: ItemStatus,
+    highlight: bool,
+}
+
 async fn get_items(
+    config: &Config,
     conn: &mut DbConn,
     parsed_feed: &ParsedFeed,
     now: DateTime<Utc>,
-) -> ah::Result<(Vec<Item>, DateTime<Utc>, i64)> {
+) -> ah::Result<(Vec<FilteredItem>, DateTime<Utc>)> {
     let mut items = Vec::with_capacity(16);
     let mut oldest = now;
-    let mut new_items_count = 0;
     for parsed_entry in &parsed_feed.entries {
         let feed_item_id = parsed_entry.id.clone();
 
@@ -189,17 +208,21 @@ async fn get_items(
         {
             ItemStatus::Exists => (),
             s @ ItemStatus::New | s @ ItemStatus::Updated => {
-                items.push(item);
-                if s == ItemStatus::New {
-                    new_items_count += 1;
-                }
+                let highlight = should_highlight(config, &item);
+                let fil_item = FilteredItem {
+                    item,
+                    status: s,
+                    highlight,
+                };
+                items.push(fil_item);
             }
         }
     }
-    Ok((items, oldest, new_items_count))
+    Ok((items, oldest))
 }
 
 async fn refresh_feed(
+    config: Arc<Config>,
     db: Arc<Db>,
     mut feed: Feed,
     next_retrieval: DateTime<Utc>,
@@ -243,7 +266,12 @@ async fn refresh_feed(
 
     let now = Utc::now();
     let mut conn = db.open().await.context("Open database")?;
-    let (items, oldest, new_items_count) = get_items(&mut conn, &parsed_feed, now).await?;
+    let (items, oldest) = get_items(&config, &mut conn, &parsed_feed, now).await?;
+
+    let new_items_count: i64 = items
+        .iter()
+        .map(|i| (i.status == ItemStatus::New && i.highlight) as i64)
+        .sum();
 
     if let Some(title) = parsed_feed.title.as_ref() {
         feed.title = title.content.clone();
@@ -267,6 +295,7 @@ async fn refresh_feed(
 
     let gc_thres = oldest - GC_AGE_OFFSET;
 
+    let items: Vec<Item> = items.into_iter().map(|i| i.item).collect();
     conn.update_feed(&feed, &items, Some(gc_thres), increment_update_revision)
         .await
         .context("Update feed")?;
@@ -274,7 +303,11 @@ async fn refresh_feed(
     Ok(())
 }
 
-pub async fn refresh_feeds(db: Arc<Db>, refresh_interval: Duration) -> ah::Result<Duration> {
+pub async fn refresh_feeds(
+    config: Arc<Config>,
+    db: Arc<Db>,
+    refresh_interval: Duration,
+) -> ah::Result<Duration> {
     let next_retrieval = Utc::now() + rand_interval(refresh_interval, REFRESH_SLACK);
 
     let feeds_due = db
@@ -290,9 +323,10 @@ pub async fn refresh_feeds(db: Arc<Db>, refresh_interval: Duration) -> ah::Resul
     let mut set = JoinSet::new();
     for feed in feeds_due {
         set.spawn({
+            let config = Arc::clone(&config);
             let db = Arc::clone(&db);
             let net_sema = Arc::clone(&net_sema);
-            async move { refresh_feed(db, feed, next_retrieval, net_sema).await }
+            async move { refresh_feed(config, db, feed, next_retrieval, net_sema).await }
         });
     }
     while let Some(result) = set.join_next().await {

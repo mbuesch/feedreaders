@@ -20,9 +20,11 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true, features = [ "std", "help", "usage", "error-context", "derive" ] }
 feed-rs = { workspace = true }
+feedscfg = { workspace = true }
 feedsdb = { workspace = true }
 itertools = { workspace = true }
 rand = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true, features = [ "http2", "rustls-tls", "gzip", "brotli", "zstd", "deflate" ] }
 sd-notify = { workspace = true }
 tokio = { workspace = true, features = [ "rt-multi-thread", "macros", "signal", "sync" ] }
