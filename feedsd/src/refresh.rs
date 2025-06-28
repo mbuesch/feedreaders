@@ -106,14 +106,31 @@ async fn get_feed(href: &str) -> ah::Result<FeedResult> {
 }
 
 fn should_highlight(config: &Config, item: &Item) -> bool {
-    !(config
-        .title_deny_highlighting
+    if config
+        .no_highlighting
+        .title
         .iter()
         .any(|re| re.is_match(&item.title))
-        || config
-            .summary_deny_highlighting
-            .iter()
-            .any(|re| re.is_match(&item.summary)))
+    {
+        return false;
+    }
+    if config
+        .no_highlighting
+        .summary
+        .iter()
+        .any(|re| re.is_match(&item.summary))
+    {
+        return false;
+    }
+    if config
+        .no_highlighting
+        .url
+        .iter()
+        .any(|re| re.is_match(&item.link))
+    {
+        return false;
+    }
+    true
 }
 
 struct FilteredItem {

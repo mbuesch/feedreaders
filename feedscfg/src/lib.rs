@@ -22,10 +22,41 @@ use regex::Regex;
 use std::path::Path;
 use toml::{Table, Value};
 
+fn parse_regex(name: &str, value: &str) -> ah::Result<Regex> {
+    match Regex::new(value) {
+        Ok(re) => Ok(re),
+        Err(e) => Err(err!("Configuration entry '{name}' invalid regex: {e}")),
+    }
+}
+
+fn parse_regex_array(name: &str, value: &Value) -> ah::Result<Vec<Regex>> {
+    let mut ret = vec![];
+    if let Value::Array(a) = value {
+        for item in a {
+            if let Value::String(s) = item {
+                ret.push(parse_regex(name, s)?);
+            } else {
+                return Err(err!(
+                    "Configuration entry '{name}' array element is not a string."
+                ));
+            }
+        }
+    } else {
+        return Err(err!("Configuration entry '{name}' is not an array."));
+    }
+    Ok(ret)
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ConfigNoHighlighting {
+    pub title: Vec<Regex>,
+    pub summary: Vec<Regex>,
+    pub url: Vec<Regex>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Config {
-    pub title_deny_highlighting: Vec<Regex>,
-    pub summary_deny_highlighting: Vec<Regex>,
+    pub no_highlighting: ConfigNoHighlighting,
 }
 
 impl Config {
@@ -45,47 +76,25 @@ impl Config {
     pub fn parse_str(s: &str) -> ah::Result<Self> {
         let table: Table = toml::from_str(s).context("Parse configuration file")?;
         let mut config = Config::new();
-        for (name, value) in &table {
-            if name == "title_deny_highlighting"
-                && let Value::Array(list) = value
-            {
-                for item in list {
-                    if let Value::String(item) = item {
-                        match Regex::new(item) {
-                            Ok(re) => {
-                                config.title_deny_highlighting.push(re);
-                            }
-                            Err(e) => {
-                                return Err(err!(
-                                    "Configuration entry '{name}' invalid regex: {e}"
-                                ));
-                            }
-                        }
-                    } else {
-                        return Err(err!("Configuration entry '{name}' is not a string."));
-                    }
-                }
-                continue;
-            }
 
-            if name == "summary_deny_highlighting"
-                && let Value::Array(list) = value
+        for (name, value) in &table {
+            if name == "no-highlighting"
+                && let Value::Table(t) = value
             {
-                for item in list {
-                    if let Value::String(item) = item {
-                        match Regex::new(item) {
-                            Ok(re) => {
-                                config.summary_deny_highlighting.push(re);
-                            }
-                            Err(e) => {
-                                return Err(err!(
-                                    "Configuration entry '{name}' invalid regex: {e}"
-                                ));
-                            }
-                        }
-                    } else {
-                        return Err(err!("Configuration entry '{name}' is not a string."));
+                for (name, value) in t {
+                    if name == "title" {
+                        config.no_highlighting.title = parse_regex_array(name, value)?;
+                        continue;
                     }
+                    if name == "summary" {
+                        config.no_highlighting.summary = parse_regex_array(name, value)?;
+                        continue;
+                    }
+                    if name == "url" {
+                        config.no_highlighting.url = parse_regex_array(name, value)?;
+                        continue;
+                    }
+                    eprintln!("Ignoring configuration entry: {name} = {value:?}");
                 }
                 continue;
             }
