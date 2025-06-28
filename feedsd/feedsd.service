@@ -19,5 +19,8 @@ User=www-data
 Group=www-data
 Nice=10
 
+Environment=RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=0
+Environment=FEEDREADER_LOG=info FEEDREADER_LOG_STYLE=never
+
 [Install]
 WantedBy=multi-user.target

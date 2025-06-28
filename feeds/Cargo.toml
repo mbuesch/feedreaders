@@ -18,10 +18,13 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
+console-subscriber = { workspace = true }
+env_logger = { workspace = true }
 feedsdb = { workspace = true }
 html-escape = { workspace = true }
-nix = { workspace = true, features = [ "signal" ] }
+log = { workspace = true }
 multer = { workspace = true, features = [ "tokio-io" ] }
+nix = { workspace = true, features = [ "signal" ] }
 querystrong = { workspace = true }
 tokio = { workspace = true, features = [ "rt", "macros", "sync", "fs" ] }
 

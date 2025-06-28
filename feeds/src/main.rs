@@ -37,6 +37,12 @@ struct Opts {
     /// The name of the database to use.
     #[arg(long, default_value = "feeds")]
     db: String,
+
+    /// Enable `tokio-console` tracing support.
+    ///
+    /// See https://crates.io/crates/tokio-console
+    #[arg(long)]
+    tokio_console: bool,
 }
 
 async fn async_main(opts: Opts) -> ah::Result<()> {
@@ -55,7 +61,17 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
 }
 
 fn main() -> ah::Result<()> {
+    env_logger::init_from_env(
+        env_logger::Env::new()
+            .filter_or("FEEDREADER_LOG", "info")
+            .write_style_or("FEEDREADER_LOG_STYLE", "auto"),
+    );
+
     let opts = Opts::parse();
+
+    if opts.tokio_console {
+        console_subscriber::init();
+    }
 
     runtime::Builder::new_current_thread()
         .worker_threads(1)

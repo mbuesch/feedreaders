@@ -63,6 +63,12 @@ struct Opts {
     /// Do not create `/run/feedsd/feedsd.pid`.
     #[arg(long)]
     no_pidfile: bool,
+
+    /// Enable `tokio-console` tracing support.
+    ///
+    /// See https://crates.io/crates/tokio-console
+    #[arg(long)]
+    tokio_console: bool,
 }
 
 impl Opts {
@@ -181,7 +187,17 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
 }
 
 fn main() -> ah::Result<()> {
+    env_logger::init_from_env(
+        env_logger::Env::new()
+            .filter_or("FEEDREADER_LOG", "info")
+            .write_style_or("FEEDREADER_LOG_STYLE", "auto"),
+    );
+
     let opts = Opts::parse();
+
+    if opts.tokio_console {
+        console_subscriber::init();
+    }
 
     runtime::Builder::new_multi_thread()
         .worker_threads(opts.worker_threads.into())
