@@ -24,6 +24,7 @@ use feed_rs::model::Feed as ParsedFeed;
 use feedscfg::Config;
 use feedsdb::{DEBUG, Db, DbConn, Feed, Item, ItemStatus};
 use rand::{prelude::*, rng};
+use regex::Regex;
 use std::{sync::Arc, time::Duration};
 use tokio::{
     sync::Semaphore,
@@ -105,12 +106,20 @@ async fn get_feed(href: &str) -> ah::Result<FeedResult> {
     Ok(FeedResult::Feed(feed))
 }
 
+fn highlight_re_matches(name: &str, s: &str, re: &Regex) -> bool {
+    let matches = re.is_match(s);
+    if matches {
+        eprintln!("no-highlighting rule {name}/{re} matches '{s}'.");
+    }
+    matches
+}
+
 fn should_highlight(config: &Config, item: &Item) -> bool {
     if config
         .no_highlighting
         .title
         .iter()
-        .any(|re| re.is_match(&item.title))
+        .any(|re| highlight_re_matches("title", &item.title, &re))
     {
         return false;
     }
@@ -118,7 +127,7 @@ fn should_highlight(config: &Config, item: &Item) -> bool {
         .no_highlighting
         .summary
         .iter()
-        .any(|re| re.is_match(&item.summary))
+        .any(|re| highlight_re_matches("summary", &item.summary, &re))
     {
         return false;
     }
@@ -126,7 +135,7 @@ fn should_highlight(config: &Config, item: &Item) -> bool {
         .no_highlighting
         .url
         .iter()
-        .any(|re| re.is_match(&item.link))
+        .any(|re| highlight_re_matches("url", &item.link, &re))
     {
         return false;
     }
