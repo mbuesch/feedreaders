@@ -69,7 +69,11 @@ impl Config {
     }
 
     pub fn parse_file(path: &Path) -> ah::Result<Self> {
-        let s = std::fs::read_to_string(path).context("Read configuration file")?;
+        let s = if path.exists() {
+            std::fs::read_to_string(path).context("Read configuration file")?
+        } else {
+            "".to_string()
+        };
         Self::parse_str(&s)
     }
 
