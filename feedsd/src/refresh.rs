@@ -22,7 +22,7 @@ use anyhow::{self as ah, Context as _, format_err as err};
 use chrono::{DateTime, Utc};
 use feed_rs::model::Feed as ParsedFeed;
 use feedscfg::Config;
-use feedsdb::{DEBUG, Db, DbConn, Feed, Item, ItemStatus};
+use feedsdb::{Db, DbConn, Feed, Item, ItemStatus};
 use rand::{prelude::*, rng};
 use regex::Regex;
 use std::{sync::Arc, time::Duration};
@@ -109,7 +109,7 @@ async fn get_feed(href: &str) -> ah::Result<FeedResult> {
 fn highlight_re_matches(name: &str, s: &str, re: &Regex) -> bool {
     let matches = re.is_match(s);
     if matches {
-        eprintln!("no-highlighting rule {name}/{re} matches '{s}'.");
+        log::debug!("no-highlighting rule {name}/{re} matches '{s}'.");
     }
     matches
 }
@@ -254,9 +254,7 @@ async fn refresh_feed(
     next_retrieval: DateTime<Utc>,
     net_sema: Arc<Semaphore>,
 ) -> ah::Result<()> {
-    if DEBUG {
-        println!("Refreshing {} ...", feed.title);
-    }
+    log::debug!("Refreshing {} ...", feed.title);
 
     let parsed_feed = {
         let _permit = net_sema.acquire().await?;

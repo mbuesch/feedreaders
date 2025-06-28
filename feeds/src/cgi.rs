@@ -23,7 +23,6 @@ use crate::{
     query::Query,
 };
 use anyhow::{self as ah, format_err as err};
-use feedsdb::DEBUG;
 use std::{
     env,
     ffi::OsString,
@@ -31,6 +30,7 @@ use std::{
     time::Instant,
 };
 
+const DEBUG: bool = true;
 const MAX_CGIENV_LEN: usize = 1024 * 4;
 const MAX_CGIENV_U32_LEN: usize = 10;
 const MAX_POST_BODY_LEN: u32 = 1024 * 1024;

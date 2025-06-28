@@ -34,7 +34,6 @@ use std::{
 };
 use tokio::task::spawn_blocking;
 
-pub const DEBUG: bool = true;
 const TIMEOUT: Duration = Duration::from_millis(10_000);
 
 // Keys for the global kv_int_int key-value store.

@@ -40,12 +40,12 @@ pub async fn wakeup_feedsd() {
     let pid = match get_feedsd_pid().await {
         Ok(pid) => pid,
         Err(e) => {
-            eprintln!("Failed to get feedsd pid: {e:?}");
+            log::warn!("Failed to get feedsd pid: {e:?}");
             return;
         }
     };
     if let Err(e) = kill(pid, Signal::SIGHUP) {
-        eprintln!("Failed to send SIGHUP to feedsd: {e:?}");
+        log::warn!("Failed to send SIGHUP to feedsd: {e:?}");
     }
 }
 

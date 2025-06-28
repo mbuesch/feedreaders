@@ -587,6 +587,7 @@ name = "feedscfg"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "log",
  "regex",
  "toml",
 ]

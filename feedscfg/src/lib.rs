@@ -94,12 +94,12 @@ impl Config {
                         config.no_highlighting.url = parse_regex_array(name, value)?;
                         continue;
                     }
-                    eprintln!("Ignoring configuration entry: {name} = {value:?}");
+                    log::warn!("Ignoring configuration entry: {name} = {value:?}");
                 }
                 continue;
             }
 
-            eprintln!("Ignoring configuration entry: {name} = {value:?}");
+            log::warn!("Ignoring configuration entry: {name} = {value:?}");
         }
         Ok(config)
     }

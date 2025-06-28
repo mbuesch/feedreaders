@@ -26,7 +26,7 @@ use crate::{refresh::refresh_feeds, systemd::systemd_notify_ready};
 use anyhow::{self as ah, Context as _, format_err as err};
 use clap::Parser;
 use feedscfg::Config;
-use feedsdb::{DEBUG, Db};
+use feedsdb::Db;
 use std::{fs::OpenOptions, io::Write as _, num::NonZeroUsize, sync::Arc, time::Duration};
 use tokio::{
     runtime,
@@ -79,18 +79,14 @@ impl Opts {
 
 #[must_use]
 async fn do_refresh(db: Arc<Db>, opts: &Opts, config: Arc<Config>) -> (bool, Duration) {
-    if DEBUG {
-        eprintln!("Refreshing...");
-    }
+    log::info!("Refreshing...");
     match refresh_feeds(config, db, opts.refresh_interval()).await {
         Err(e) => {
-            eprintln!("ERROR: {e:?}");
+            log::error!("{e:?}");
             (false, Duration::from_secs(60))
         }
         Ok(sleep_dur) => {
-            if DEBUG {
-                eprintln!("Refreshed. Sleeping {sleep_dur:?}.");
-            }
+            log::info!("Refreshed. Sleeping {sleep_dur:?}.");
             (true, sleep_dur)
         }
     }
@@ -165,7 +161,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
     loop {
         tokio::select! {
             _ = sigterm.recv() => {
-                eprintln!("SIGTERM: Terminating.");
+                log::info!("SIGTERM: Terminating.");
                 exitcode = Ok(());
                 break;
             }
@@ -174,7 +170,7 @@ async fn async_main(opts: Opts) -> ah::Result<()> {
                 break;
             }
             _ = sighup.recv() => {
-                println!("SIGHUP: Triggering database refresh.");
+                log::info!("SIGHUP: Triggering database refresh.");
                 let _ = do_refresh(Arc::clone(&db), &opts, Arc::clone(&config)).await;
             }
             code = exit_sock_rx.recv() => {
