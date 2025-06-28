@@ -119,7 +119,7 @@ fn should_highlight(config: &Config, item: &Item) -> bool {
         .no_highlighting
         .title
         .iter()
-        .any(|re| highlight_re_matches("title", &item.title, &re))
+        .any(|re| highlight_re_matches("title", &item.title, re))
     {
         return false;
     }
@@ -127,7 +127,7 @@ fn should_highlight(config: &Config, item: &Item) -> bool {
         .no_highlighting
         .summary
         .iter()
-        .any(|re| highlight_re_matches("summary", &item.summary, &re))
+        .any(|re| highlight_re_matches("summary", &item.summary, re))
     {
         return false;
     }
@@ -135,7 +135,7 @@ fn should_highlight(config: &Config, item: &Item) -> bool {
         .no_highlighting
         .url
         .iter()
-        .any(|re| highlight_re_matches("url", &item.link, &re))
+        .any(|re| highlight_re_matches("url", &item.link, re))
     {
         return false;
     }
