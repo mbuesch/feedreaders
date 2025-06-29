@@ -22,24 +22,31 @@ use regex::Regex;
 use std::path::Path;
 use toml::{Table, Value};
 
-fn parse_regex(name: &str, value: &str) -> ah::Result<Regex> {
-    match Regex::new(value) {
-        Ok(re) => Ok(re),
-        Err(e) => Err(err!("Configuration entry '{name}' invalid regex: {e}")),
+fn parse_bool(name: &str, value: &Value) -> ah::Result<bool> {
+    match value {
+        Value::Boolean(b) => Ok(*b),
+        _ => Err(err!("Configuration entry '{name}' invalid boolean.")),
+    }
+}
+
+fn parse_regex(name: &str, value: &Value) -> ah::Result<Regex> {
+    if let Value::String(s) = value {
+        match Regex::new(s) {
+            Ok(re) => Ok(re),
+            Err(e) => Err(err!("Configuration entry '{name}' invalid regex: {e}")),
+        }
+    } else {
+        Err(err!(
+            "Configuration entry '{name}' array element is not a string."
+        ))
     }
 }
 
 fn parse_regex_array(name: &str, value: &Value) -> ah::Result<Vec<Regex>> {
     let mut ret = vec![];
-    if let Value::Array(a) = value {
-        for item in a {
-            if let Value::String(s) = item {
-                ret.push(parse_regex(name, s)?);
-            } else {
-                return Err(err!(
-                    "Configuration entry '{name}' array element is not a string."
-                ));
-            }
+    if let Value::Array(array) = value {
+        for value in array {
+            ret.push(parse_regex(name, value)?);
         }
     } else {
         return Err(err!("Configuration entry '{name}' is not an array."));
@@ -52,6 +59,7 @@ pub struct ConfigNoHighlighting {
     pub title: Vec<Regex>,
     pub summary: Vec<Regex>,
     pub url: Vec<Regex>,
+    pub set_seen: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -96,6 +104,10 @@ impl Config {
                     }
                     if name == "url" {
                         config.no_highlighting.url = parse_regex_array(name, value)?;
+                        continue;
+                    }
+                    if name == "set-seen" {
+                        config.no_highlighting.set_seen = parse_bool(name, value)?;
                         continue;
                     }
                     log::warn!("Ignoring configuration entry: {name} = {value:?}");

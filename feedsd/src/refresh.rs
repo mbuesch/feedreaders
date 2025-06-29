@@ -235,6 +235,9 @@ async fn get_items(
             ItemStatus::Exists => (),
             s @ ItemStatus::New | s @ ItemStatus::Updated => {
                 let highlight = should_highlight(config, &item);
+                if !highlight && config.no_highlighting.set_seen {
+                    item.seen = true;
+                }
                 let fil_item = FilteredItem {
                     item,
                     status: s,
