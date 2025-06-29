@@ -31,13 +31,6 @@ use tokio::{
     task::{self, JoinSet},
 };
 
-//TODO move this stuff to the configuration file.
-const NET_TIMEOUT: Duration = Duration::from_secs(10);
-const NET_CONCURRENCY: usize = 1; // no concurrency
-const REFRESH_SLACK: f64 = 0.1;
-const GC_AGE_OFFSET: Duration = Duration::from_secs((365 * 24 * 60 * 60) / 2); // 1/2 year
-const NOTIFY_ONLY_NEW_ITEMS: bool = true;
-
 fn rand_interval(refresh_interval: Duration, slack_rel: f64) -> Duration {
     let slack = (refresh_interval.as_millis() as f64 * slack_rel) as u64;
     let a = refresh_interval.as_millis() as u64 - (slack / 2);
@@ -51,7 +44,7 @@ enum FeedResult {
     Gone,
 }
 
-async fn get_feed(href: &str) -> ah::Result<FeedResult> {
+async fn get_feed(config: &Config, href: &str) -> ah::Result<FeedResult> {
     use feed_rs::parser;
     use reqwest::{Client, StatusCode};
 
@@ -63,7 +56,7 @@ async fn get_feed(href: &str) -> ah::Result<FeedResult> {
     let client = Client::builder()
         .user_agent(user_agent)
         .referer(false)
-        .timeout(NET_TIMEOUT)
+        .timeout(config.net.timeout)
         .build()
         .context("Retrieve feed")?;
 
@@ -262,7 +255,7 @@ async fn refresh_feed(
     let parsed_feed = {
         let _permit = net_sema.acquire().await?;
 
-        match get_feed(&feed.href).await? {
+        match get_feed(&config, &feed.href).await? {
             FeedResult::Feed(f) => f,
             FeedResult::MovedPermanently(location) => {
                 if let Some(location) = location {
@@ -309,18 +302,18 @@ async fn refresh_feed(
     let mut increment_update_revision = false;
     if !items.is_empty() {
         feed.last_activity = now;
-        if NOTIFY_ONLY_NEW_ITEMS {
+        if config.db.highlight_updated_items {
+            feed.updated_items += items.len() as i64;
+            increment_update_revision = true;
+        } else {
             feed.updated_items += new_items_count;
             if new_items_count > 0 {
                 increment_update_revision = true;
             }
-        } else {
-            feed.updated_items += items.len() as i64;
-            increment_update_revision = true;
         }
     }
 
-    let gc_thres = oldest - GC_AGE_OFFSET;
+    let gc_thres = oldest - config.db.gc_age_offset;
 
     let items: Vec<Item> = items.into_iter().map(|i| i.item).collect();
     conn.update_feed(&feed, &items, Some(gc_thres), increment_update_revision)
@@ -330,12 +323,9 @@ async fn refresh_feed(
     Ok(())
 }
 
-pub async fn refresh_feeds(
-    config: Arc<Config>,
-    db: Arc<Db>,
-    refresh_interval: Duration,
-) -> ah::Result<Duration> {
-    let next_retrieval = Utc::now() + rand_interval(refresh_interval, REFRESH_SLACK);
+pub async fn refresh_feeds(config: Arc<Config>, db: Arc<Db>) -> ah::Result<Duration> {
+    let next_retrieval =
+        Utc::now() + rand_interval(config.db.refresh_interval, config.db.refresh_slack);
 
     let feeds_due = db
         .open()
@@ -345,7 +335,7 @@ pub async fn refresh_feeds(
         .await
         .context("Get feeds due")?;
 
-    let net_sema = Arc::new(Semaphore::new(NET_CONCURRENCY));
+    let net_sema = Arc::new(Semaphore::new(config.net.concurrency.into()));
 
     let mut set = JoinSet::new();
     for feed in feeds_due {

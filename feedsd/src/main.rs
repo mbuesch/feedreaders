@@ -56,10 +56,6 @@ struct Opts {
     #[arg(long, default_value = "4")]
     worker_threads: NonZeroUsize,
 
-    /// Feed refresh interval, in seconds.
-    #[arg(long, default_value = "600")]
-    refresh_interval: u64,
-
     /// Do not create `/run/feedsd/feedsd.pid`.
     #[arg(long)]
     no_pidfile: bool,
@@ -71,16 +67,10 @@ struct Opts {
     tokio_console: bool,
 }
 
-impl Opts {
-    pub fn refresh_interval(&self) -> Duration {
-        Duration::from_secs(self.refresh_interval)
-    }
-}
-
 #[must_use]
-async fn do_refresh(db: Arc<Db>, opts: &Opts, config: Arc<Config>) -> (bool, Duration) {
+async fn do_refresh(db: Arc<Db>, _opts: &Opts, config: Arc<Config>) -> (bool, Duration) {
     log::info!("Refreshing...");
-    match refresh_feeds(config, db, opts.refresh_interval()).await {
+    match refresh_feeds(config, db).await {
         Err(e) => {
             log::error!("{e:?}");
             (false, Duration::from_secs(60))

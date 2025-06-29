@@ -19,8 +19,10 @@
 
 use anyhow::{self as ah, Context as _, format_err as err};
 use regex::Regex;
-use std::path::Path;
+use std::{num::NonZeroUsize, path::Path, time::Duration};
 use toml::{Table, Value};
+
+const DAYS_TO_SECS: u64 = 24 * 60 * 60;
 
 fn parse_bool(name: &str, value: &Value) -> ah::Result<bool> {
     match value {
@@ -54,6 +56,80 @@ fn parse_regex_array(name: &str, value: &Value) -> ah::Result<Vec<Regex>> {
     Ok(ret)
 }
 
+fn parse_duration_secs(name: &str, value: &Value) -> ah::Result<Duration> {
+    match value {
+        Value::Integer(secs) if secs >= &0 => Ok(Duration::from_secs(*secs as u64)),
+        _ => Err(err!("Configuration entry '{name}' invalid integer.")),
+    }
+}
+
+fn parse_duration_days(name: &str, value: &Value) -> ah::Result<Duration> {
+    match value {
+        Value::Integer(days) if days >= &0 => {
+            Ok(Duration::from_secs((*days as u64) * DAYS_TO_SECS))
+        }
+        _ => Err(err!("Configuration entry '{name}' invalid integer.")),
+    }
+}
+
+fn parse_f64(name: &str, value: &Value) -> ah::Result<f64> {
+    match value {
+        Value::Float(val) => Ok(*val),
+        Value::Integer(val) => Ok(*val as f64),
+        _ => Err(err!(
+            "Configuration entry '{name}' invalid floating point number."
+        )),
+    }
+}
+
+fn parse_usize(name: &str, value: &Value) -> ah::Result<usize> {
+    match value {
+        Value::Integer(val) if val >= &0 => Ok(*val as usize),
+        _ => Err(err!("Configuration entry '{name}' invalid integer.")),
+    }
+}
+
+fn parse_nonzerousize(name: &str, value: &Value) -> ah::Result<NonZeroUsize> {
+    parse_usize(name, value).and_then(|v| match v.try_into() {
+        Ok(v) => Ok(v),
+        Err(_) => Err(err!("Configuration entry '{name}' invalid integer.")),
+    })
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfigNet {
+    pub timeout: Duration,
+    pub concurrency: NonZeroUsize,
+}
+
+impl Default for ConfigNet {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::from_secs(10),
+            concurrency: NonZeroUsize::new(1).unwrap(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfigDb {
+    pub refresh_interval: Duration,
+    pub refresh_slack: f64,
+    pub gc_age_offset: Duration,
+    pub highlight_updated_items: bool,
+}
+
+impl Default for ConfigDb {
+    fn default() -> Self {
+        Self {
+            refresh_interval: Duration::from_secs(600),
+            refresh_slack: 0.1,
+            gc_age_offset: Duration::from_secs(180 * DAYS_TO_SECS),
+            highlight_updated_items: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct ConfigNoHighlighting {
     pub title: Vec<Regex>,
@@ -64,6 +140,8 @@ pub struct ConfigNoHighlighting {
 
 #[derive(Debug, Clone, Default)]
 pub struct Config {
+    pub net: ConfigNet,
+    pub db: ConfigDb,
     pub no_highlighting: ConfigNoHighlighting,
 }
 
@@ -90,6 +168,48 @@ impl Config {
         let mut config = Config::new();
 
         for (name, value) in &table {
+            if name == "net"
+                && let Value::Table(t) = value
+            {
+                for (name, value) in t {
+                    if name == "timeout-secs" {
+                        config.net.timeout = parse_duration_secs(name, value)?;
+                        continue;
+                    }
+                    if name == "concurrency" {
+                        config.net.concurrency = parse_nonzerousize(name, value)?;
+                        continue;
+                    }
+                    log::warn!("Ignoring configuration entry: {name} = {value:?}");
+                }
+                continue;
+            }
+
+            if name == "db"
+                && let Value::Table(t) = value
+            {
+                for (name, value) in t {
+                    if name == "refresh-interval-secs" {
+                        config.db.refresh_interval = parse_duration_secs(name, value)?;
+                        continue;
+                    }
+                    if name == "refresh-slack" {
+                        config.db.refresh_slack = parse_f64(name, value)?;
+                        continue;
+                    }
+                    if name == "gc-age-offset-days" {
+                        config.db.gc_age_offset = parse_duration_days(name, value)?;
+                        continue;
+                    }
+                    if name == "highlight-updated-items" {
+                        config.db.highlight_updated_items = parse_bool(name, value)?;
+                        continue;
+                    }
+                    log::warn!("Ignoring configuration entry: {name} = {value:?}");
+                }
+                continue;
+            }
+
             if name == "no-highlighting"
                 && let Value::Table(t) = value
             {
