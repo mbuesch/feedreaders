@@ -69,10 +69,10 @@ async fn get_feed(config: &Config, href: &str) -> ah::Result<FeedResult> {
                 .headers()
                 .get("Location")
                 .map(|l| l.to_str().unwrap_or_default().to_string());
-            if let Some(l) = location.as_ref() {
-                if l.trim().is_empty() {
-                    location = None;
-                }
+            if let Some(l) = location.as_ref()
+                && l.trim().is_empty()
+            {
+                location = None;
             }
             return Ok(FeedResult::MovedPermanently(location));
         }
