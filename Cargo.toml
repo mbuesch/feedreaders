@@ -13,7 +13,7 @@ resolver = "3"
 [workspace.package]
 version = "1.0.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "GPL-2.0-or-later"
 authors = [ "Michael Büsch <m@bues.ch>", "Marco Lochen" ]
 homepage = "https://bues.ch/"
