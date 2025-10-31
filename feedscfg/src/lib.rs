@@ -216,6 +216,7 @@ impl Config {
                 for (name, value) in t {
                     if name == "title" {
                         config.no_highlighting.title = parse_regex_array(name, value)?;
+                        //TODO print them to log
                         continue;
                     }
                     if name == "summary" {

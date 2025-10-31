@@ -26,7 +26,7 @@ keywords = [ "feed-reader", "rss", "atom" ]
 anyhow = "1"
 chrono = "0.4"
 clap = { version = "4", default-features = false }
-console-subscriber = "0.4"
+console-subscriber = "0.5"
 env_logger = "0.11"
 feed-rs = "2"
 hex = "0.4"

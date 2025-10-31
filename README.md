@@ -119,6 +119,10 @@ Running this cgi behind a https+auth barrier is fine and there's no problem with
 
 If you don't know what this means, please ask your favorite search engine before setting up a web server.
 
+# TODO
+
+Add button to set items unseen.
+
 # License / Copyright
 
 Copyright (C) 2024-2025 Michael Büsch
