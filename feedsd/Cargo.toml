@@ -28,7 +28,7 @@ itertools = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
-reqwest = { workspace = true, features = [ "http2", "rustls-tls", "gzip", "brotli", "zstd", "deflate" ] }
+reqwest = { workspace = true, features = [ "http2", "rustls", "gzip", "brotli", "zstd", "deflate" ] }
 sd-notify = { workspace = true }
 tokio = { workspace = true, features = [ "rt-multi-thread", "macros", "signal", "sync" ] }
 
