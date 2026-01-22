@@ -34,7 +34,7 @@ html-escape = "0.2"
 itertools = "0.14"
 log = "0.4"
 multer = "3"
-nix = { version = "0.30", default-features = false }
+nix = { version = "0.31", default-features = false }
 querystrong = "0.3"
 rand = "0.9"
 regex = "1"
