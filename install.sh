@@ -188,6 +188,7 @@ install_conf
 install_feedsd
 install_feeds
 install_feedscli
+do_systemctl daemon-reload
 start_services
 
 # vim: ts=4 sw=4 expandtab
