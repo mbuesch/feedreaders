@@ -17,17 +17,23 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use anyhow as ah;
+use anyhow::{self as ah, format_err as err};
 use querystrong::QueryStrong;
 
 pub struct Query {
-    qs: QueryStrong,
+    qs: QueryStrong<'static>,
 }
 
 impl Query {
     pub fn parse(qs: &str) -> ah::Result<Self> {
+        let qs = match QueryStrong::parse_strict(qs) {
+            Ok(qs) => qs,
+            Err(_) => {
+                return Err(err!("Failed to parse query string"));
+            }
+        };
         Ok(Self {
-            qs: QueryStrong::parse(qs)?,
+            qs: qs.into_owned(),
         })
     }
 
