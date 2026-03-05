@@ -179,6 +179,8 @@ fn main() -> ah::Result<()> {
             .write_style_or("FEEDREADER_LOG_STYLE", "auto"),
     );
 
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     let opts = Opts::parse();
 
     if opts.tokio_console {
