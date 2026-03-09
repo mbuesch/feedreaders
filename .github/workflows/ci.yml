@@ -16,7 +16,7 @@ jobs:
       matrix:
         toolchain:
           - name: stable
-            version: 1.93
+            version: stable
         os:
           - name: linux
             version: ubuntu-latest
