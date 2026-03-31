@@ -299,14 +299,15 @@ async fn refresh_feed(
     feed.last_retrieval = now;
     feed.next_retrieval = next_retrieval;
 
+    feed.updated_items = 0;
     let mut increment_update_revision = false;
     if !items.is_empty() {
         feed.last_activity = now;
         if config.db.highlight_updated_items {
-            feed.updated_items += items.len() as i64;
+            feed.updated_items = items.len() as i64;
             increment_update_revision = true;
         } else {
-            feed.updated_items += new_items_count;
+            feed.updated_items = new_items_count;
             if new_items_count > 0 {
                 increment_update_revision = true;
             }

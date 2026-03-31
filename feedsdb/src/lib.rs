@@ -382,7 +382,7 @@ impl DbConn {
                         next_retrieval = ?, \
                         last_activity = ?, \
                         disabled = ?, \
-                        updated_items = ? \
+                        updated_items = updated_items + ? \
                     WHERE feed_id = ?\
                 ",
             )?
