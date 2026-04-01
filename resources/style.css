@@ -80,12 +80,30 @@ body a {
 .peek {
     font-size: 16px;
     text-decoration: none;
+    accent-color: #444444;
+    opacity: 0.7;
+}
+
+input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 1em;
+    height: 1em;
+    border: 1px solid #888888;
+    background: #222222;
+    opacity: 0.8;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+input[type="checkbox"]:checked {
+    accent-color: #444444;
+    background: #CCCCCC;
 }
 
 .active_row {
     background: #444444;
 }
-
 
 /* item list style */
 
