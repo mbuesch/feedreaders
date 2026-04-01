@@ -69,7 +69,7 @@ async fn gen_feed_list(
     ln!(b, r#"  <form method="post" enctype="multipart/form-data">"#)?;
     ln!(b, r#"    <table align="center" id="feed_table">"#)?;
     ln!(b, r#"      <tr>"#)?;
-    ln!(b, r#"        <th colspan="2">"#)?;
+    ln!(b, r#"        <th colspan="3">"#)?;
     ln!(b, r#"          <a href="/cgi-bin/feeds">"#)?;
     ln!(b, r#"            <div id="feed_table_head">feeds</div>"#)?;
     ln!(b, r#"            <div id="feed_table_head_ext" hidden></div>"#)?;
