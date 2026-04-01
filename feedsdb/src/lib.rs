@@ -615,7 +615,11 @@ impl DbConn {
         .await
     }
 
-    pub async fn get_feed_items(&mut self, feed_id: i64) -> ah::Result<Vec<(Item, ItemExt)>> {
+    pub async fn get_feed_items(
+        &mut self,
+        feed_id: i64,
+        peek: bool,
+    ) -> ah::Result<Vec<(Item, ItemExt)>> {
         transaction(Arc::clone(&self.conn), move |t| {
             let items: Vec<(Item, ItemExt)> = t
                 .prepare_cached(
@@ -644,16 +648,19 @@ impl DbConn {
                 .map(|i| i.unwrap())
                 .collect();
 
-            t.prepare_cached(
-                "\
-                    UPDATE items \
-                    SET seen = TRUE \
-                    WHERE feed_id = ?\
-                ",
-            )?
-            .execute([feed_id])?;
-
-            t.commit()?;
+            if peek {
+                t.finish()?;
+            } else {
+                t.prepare_cached(
+                    "\
+                        UPDATE items \
+                        SET seen = TRUE \
+                        WHERE feed_id = ?\
+                    ",
+                )?
+                .execute([feed_id])?;
+                t.commit()?;
+            }
             Ok(items)
         })
         .await
@@ -663,6 +670,7 @@ impl DbConn {
         &mut self,
         feed_id: i64,
         item_id: &str,
+        peek: bool,
     ) -> ah::Result<Vec<Item>> {
         let item_id = item_id.to_string();
 
@@ -684,16 +692,19 @@ impl DbConn {
                 .map(|i| i.unwrap())
                 .collect();
 
-            t.prepare_cached(
-                "\
-                    UPDATE items \
-                    SET seen = TRUE \
-                    WHERE feed_id = ?\
-                ",
-            )?
-            .execute([feed_id])?;
-
-            t.commit()?;
+            if peek {
+                t.finish()?;
+            } else {
+                t.prepare_cached(
+                    "\
+                        UPDATE items \
+                        SET seen = TRUE \
+                        WHERE feed_id = ?\
+                    ",
+                )?
+                .execute([feed_id])?;
+                t.commit()?;
+            }
             Ok(items)
         })
         .await

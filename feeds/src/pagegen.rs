@@ -60,8 +60,9 @@ async fn gen_feed_list(
     b: &mut String,
     conn: &mut DbConn,
     active_feed_id: Option<i64>,
+    peek: bool,
 ) -> ah::Result<FeedsExt> {
-    let (feeds, feeds_ext) = conn.get_feeds(active_feed_id).await
+    let (feeds, feeds_ext) = conn.get_feeds(if peek { None } else { active_feed_id }).await
         .context("Database: Get feeds")?;
 
     ln!(b, r#"<div id="feed_list">"#)?;
@@ -109,6 +110,9 @@ async fn gen_feed_list(
         ln!(b, r#"        <!-- {} -->"#, escape_comment(&title))?;
         ln!(b, r#"        <!-- {} -->"#, escape_comment(&feed.href))?;
         ln!(b, r#"        <td>"#)?;
+        ln!(b, r#"          <a class="peek" href="/cgi-bin/feeds?id={feed_id}&peek=1">&#128065;</a>"#)?;
+        ln!(b, r#"        </td>"#)?;
+        ln!(b, r#"        <td>"#)?;
         ln!(b, r#"          <input name="del" value="{feed_id}" type="checkbox">"#)?;
         ln!(b, r#"        </td>"#)?;
         ln!(b, r#"        <td class="feed_title">"#)?;
@@ -138,8 +142,9 @@ async fn gen_item_list(
     b: &mut String,
     conn: &mut DbConn,
     feed_id: i64,
+    peek: bool,
 ) -> ah::Result<()> {
-    let items = conn.get_feed_items(feed_id).await
+    let items = conn.get_feed_items(feed_id, peek).await
         .context("Database: Get feed items")?;
 
     ln!(b, r#"<div id="item_list">"#)?;
@@ -162,7 +167,11 @@ async fn gen_item_list(
                 new_marker = "<b>(updated)</b> ";
             }
             wr!(&mut history, r#"<a class="history" href="/cgi-bin/feeds?"#)?;
-            wr!(&mut history, r#"id={feed_id}&itemid={item_id}">(history)</a>"#)?;
+            if peek {
+                wr!(&mut history, r#"id={feed_id}&itemid={item_id}&peek=1">(history)</a>"#)?;
+            } else {
+                wr!(&mut history, r#"id={feed_id}&itemid={item_id}">(history)</a>"#)?;
+            }
         }
 
         ln!(b, r#"  <div class="{classes}">"#)?;
@@ -185,8 +194,9 @@ async fn gen_item_history_list(
     conn: &mut DbConn,
     feed_id: i64,
     item_id: &str,
+    peek: bool,
 ) -> ah::Result<()> {
-    let items = conn.get_feed_items_by_item_id(feed_id, item_id).await
+    let items = conn.get_feed_items_by_item_id(feed_id, item_id, peek).await
         .context("Database: Get items by item_id")?;
 
     ln!(b, r#"<div id="item_list">"#)?;
@@ -249,14 +259,15 @@ async fn gen_page(
 
     let feed_id = query.get_i64("id");
     let item_id = query.get("itemid");
+    let peek = query.get("peek").map(|v| v == "1").unwrap_or(false);
 
-    let feeds_ext = gen_feed_list(b, conn, feed_id).await?;
+    let feeds_ext = gen_feed_list(b, conn, feed_id, peek).await?;
 
     if let Some(feed_id) = feed_id {
         if let Some(item_id) = &item_id {
-            gen_item_history_list(b, conn, feed_id, item_id).await?;
+            gen_item_history_list(b, conn, feed_id, item_id, peek).await?;
         } else {
-            gen_item_list(b, conn, feed_id).await?;
+            gen_item_list(b, conn, feed_id, peek).await?;
         }
     }
 
