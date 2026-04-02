@@ -710,7 +710,7 @@ impl DbConn {
         .await
     }
 
-    pub async fn set_seen(&mut self, feed_id: Option<i64>) -> ah::Result<()> {
+    pub async fn feed_set_seen(&mut self, feed_id: Option<i64>) -> ah::Result<()> {
         transaction(Arc::clone(&self.conn), move |t| {
             if let Some(feed_id) = feed_id {
                 t.prepare_cached(
@@ -746,6 +746,50 @@ impl DbConn {
                     ",
                 )?
                 .execute([])?;
+            }
+
+            t.commit()?;
+            Ok(())
+        })
+        .await
+    }
+
+    pub async fn item_set_unseen(&mut self, item_id: &str) -> ah::Result<()> {
+        let item_id = item_id.to_string();
+
+        transaction(Arc::clone(&self.conn), move |t| {
+            let feed_id: Option<i64> = t
+                .prepare_cached(
+                    "\
+                        SELECT feed_id FROM items \
+                        WHERE item_id = ?\
+                    ",
+                )?
+                .query([&item_id])?
+                .next()?
+                .and_then(|row| row.get(0).ok());
+
+            if let Some(feed_id) = feed_id {
+                t.prepare_cached(
+                    "\
+                        UPDATE items \
+                        SET seen = FALSE \
+                        WHERE feed_item_id IN (\
+                            SELECT feed_item_id FROM items \
+                            WHERE item_id = ?\
+                        )\
+                    ",
+                )?
+                .execute([&item_id])?;
+
+                t.prepare_cached(
+                    "\
+                        UPDATE feeds \
+                        SET updated_items = updated_items + 1 \
+                        WHERE feed_id = ?\
+                    ",
+                )?
+                .execute([feed_id])?;
             }
 
             t.commit()?;

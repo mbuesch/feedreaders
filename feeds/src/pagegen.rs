@@ -173,10 +173,15 @@ async fn gen_item_list(
                 wr!(&mut history, r#"id={feed_id}&itemid={item_id}">(history)</a>"#)?;
             }
         }
-
         ln!(b, r#"  <div class="{classes}">"#)?;
         ln!(b, r#"    <a class="title" href="{link}">{author}{title}</a>"#)?;
         ln!(b, r#"    {history}"#)?;
+        if !peek || item.seen {
+            ln!(b, r#"    <br />"#)?;
+            ln!(b, r#"    <form class="unseen_form" method="post" enctype="multipart/form-data" action="/cgi-bin/feeds?id={feed_id}">"#)?;
+            ln!(b, r#"      <button name="unseen" value="{item_id}" type="submit" class="button">unseen</button>"#)?;
+            ln!(b, r#"    </form>"#)?;
+        }
         ln!(b, r#"    <br />"#)?;
         ln!(b, r#"    <div class="date">{new_marker}{timestring}</div>"#)?;
         ln!(b, r#"    <br />"#)?;
@@ -255,11 +260,21 @@ async fn gen_page(
             conn.delete_feeds(&del_ids).await
                 .context("Database: Delete feeds")?;
         }
+        if let Some(unseen_id) = formfields.get_one("unseen") {
+            conn.item_set_unseen(unseen_id).await
+                .context("Database: Set unseen")?;
+        }
     }
 
     let feed_id = query.get_i64("id");
     let item_id = query.get("itemid");
-    let peek = query.get("peek").map(|v| v == "1").unwrap_or(false);
+    // After marking an item unseen via POST, render in peek mode so the item
+    // list fetch does not immediately re-mark everything as seen.
+    let unseen_action = formfields
+        .and_then(|ff| ff.get_one("unseen"))
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    let peek = query.get("peek").map(|v| v == "1").unwrap_or(false) || unseen_action;
 
     let feeds_ext = gen_feed_list(b, conn, feed_id, peek).await?;
 

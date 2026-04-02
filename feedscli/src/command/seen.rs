@@ -26,10 +26,12 @@ pub async fn command_seen(db: &Db, id: &str) -> ah::Result<()> {
     let id = id.trim().to_lowercase();
 
     if id == "all" {
-        conn.set_seen(None).await.context("Database: Set seen")?;
+        conn.feed_set_seen(None)
+            .await
+            .context("Database: Set seen")?;
     } else {
         let id = id.parse().context("Parse feed-id number")?;
-        conn.set_seen(Some(id))
+        conn.feed_set_seen(Some(id))
             .await
             .context("Database: Set seen")?;
     }

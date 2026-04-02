@@ -131,6 +131,19 @@ input[type="checkbox"]:checked {
     background: #5F2222;
 }
 
+.unseen_form {
+    display: inline;
+}
+
+.unseen_form button {
+    font-size: 10px;
+    opacity: 0.6;
+    cursor: pointer;
+    border: 1px solid #888888;
+    padding: 1px 4px;
+    vertical-align: middle;
+}
+
 img {
     width: 240px;
     height: auto;
