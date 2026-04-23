@@ -29,7 +29,7 @@ pub async fn command_list(db: &Db) -> ah::Result<()> {
         .await
         .context("Database: Get feeds")?;
 
-    feeds.sort_unstable_by(|a, b| a.feed_id.cmp(&b.feed_id));
+    feeds.sort_unstable_by_key(|a| a.feed_id);
 
     for feed in &feeds {
         println!("{}", feed.title);
