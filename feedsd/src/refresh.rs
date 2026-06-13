@@ -171,19 +171,6 @@ async fn get_items(
             *published
         } else if let Some(updated) = &parsed_entry.updated {
             *updated
-        } else if feed_item_id.contains("blog.fefe.de") {
-            // Fefe-workaround :-/
-            let Some(fefeid) = feed_item_id.split('=').next_back() else {
-                continue;
-            };
-            let Ok(fefeid) = i64::from_str_radix(fefeid, 16) else {
-                continue;
-            };
-            let stamp = fefeid ^ 0xfefec0de;
-            let Some(stamp) = DateTime::<Utc>::from_timestamp(stamp, 0) else {
-                continue;
-            };
-            stamp
         } else {
             now
         };
