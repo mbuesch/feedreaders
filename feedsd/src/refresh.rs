@@ -152,10 +152,7 @@ async fn get_items(
     for parsed_entry in &parsed_feed.entries {
         let feed_item_id = parsed_entry.id.clone();
 
-        let author = itertools::join(
-            parsed_entry.authors.iter().filter_map(|a| a.name.clone()),
-            ", ",
-        );
+        let author = itertools::join(parsed_entry.authors.iter().map(|a| &a.name), ", ");
 
         let title = parsed_entry
             .title
