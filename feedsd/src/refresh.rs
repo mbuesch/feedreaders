@@ -338,7 +338,9 @@ pub async fn refresh_feeds(config: Arc<Config>, db: Arc<Db>) -> ah::Result<Durat
         });
     }
     while let Some(result) = set.join_next().await {
-        let _: () = result??;
+        if let Err(e) = result? {
+            log::error!("Failed to refresh feed: {e:?}");
+        }
     }
 
     let next_due = db
