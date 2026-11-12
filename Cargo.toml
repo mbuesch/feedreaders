@@ -30,7 +30,7 @@ console-subscriber = "0.5"
 env_logger = "0.11"
 feed-rs = "2"
 hex = "0.4"
-html-escape = "0.2"
+html-escape = "0.3"
 itertools = "0.15"
 log = "0.4"
 multer = "3"
@@ -40,11 +40,11 @@ rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13", default-features = false }
 rustls = { version = "0.23", default-features = false }
-rusqlite = "0.40"
+rusqlite = "0.42"
 sd-notify = "0.5"
 sha2 = "0.11"
 tokio = "1"
-toml = "1.1"
+toml = "1"
 
 feedscfg = { version = "1", path = "./feedscfg" }
 feedsdb = { version = "1", path = "./feedsdb" }
