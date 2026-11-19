@@ -24,7 +24,7 @@ mod error;
 
 use crate::error::Error;
 use anyhow::{self as ah, Context as _, format_err as err};
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use rusqlite::{Connection, OpenFlags, Row};
 use sha2::{Digest as _, Sha256};
 use std::{
@@ -47,12 +47,12 @@ pub fn get_varlib() -> PathBuf {
     get_prefix().join("var/lib/feedreader")
 }
 
-fn sql_to_dt(timestamp: i64) -> DateTime<Utc> {
-    DateTime::<Utc>::from_timestamp(timestamp, 0).unwrap_or_else(Utc::now)
+fn sql_to_dt(timestamp: i64) -> Timestamp {
+    Timestamp::from_second(timestamp).unwrap_or_else(|_| Timestamp::now())
 }
 
-fn dt_to_sql(dt: &DateTime<Utc>) -> i64 {
-    dt.timestamp()
+fn dt_to_sql(dt: &Timestamp) -> i64 {
+    dt.as_second()
 }
 
 #[derive(Clone, Debug)]
@@ -60,9 +60,9 @@ pub struct Feed {
     pub feed_id: Option<i64>,
     pub href: String,
     pub title: String,
-    pub last_retrieval: DateTime<Utc>,
-    pub next_retrieval: DateTime<Utc>,
-    pub last_activity: DateTime<Utc>,
+    pub last_retrieval: Timestamp,
+    pub next_retrieval: Timestamp,
+    pub last_activity: Timestamp,
     pub disabled: bool,
     pub updated_items: i64,
 }
@@ -91,13 +91,13 @@ pub struct FeedsExt {
 pub struct Item {
     pub item_id: Option<String>,
     pub feed_id: Option<i64>,
-    pub retrieved: DateTime<Utc>,
+    pub retrieved: Timestamp,
     pub seen: bool,
     pub author: String,
     pub title: String,
     pub feed_item_id: String,
     pub link: String,
-    pub published: DateTime<Utc>,
+    pub published: Timestamp,
     pub summary: String,
 }
 
@@ -363,7 +363,7 @@ impl DbConn {
         &mut self,
         feed: &Feed,
         items: &[Item],
-        gc_thres: Option<DateTime<Utc>>,
+        gc_thres: Option<Timestamp>,
         increment_update_revision: bool,
     ) -> ah::Result<()> {
         let feed = feed.clone();
@@ -520,7 +520,7 @@ impl DbConn {
     }
 
     pub async fn get_feeds_due(&mut self) -> ah::Result<Vec<Feed>> {
-        let now = Utc::now();
+        let now = Timestamp::now();
 
         transaction(Arc::clone(&self.conn), move |t| {
             let feeds: Vec<Feed> = t
@@ -542,7 +542,7 @@ impl DbConn {
         .await
     }
 
-    pub async fn get_next_due_time(&mut self) -> ah::Result<DateTime<Utc>> {
+    pub async fn get_next_due_time(&mut self) -> ah::Result<Timestamp> {
         transaction(Arc::clone(&self.conn), move |t| {
             let next_retrieval = t
                 .prepare_cached(

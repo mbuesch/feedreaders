@@ -19,10 +19,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use anyhow::{self as ah, Context as _, format_err as err};
-use chrono::{DateTime, Utc};
 use feed_rs::model::Feed as ParsedFeed;
 use feedscfg::Config;
 use feedsdb::{Db, DbConn, Feed, Item, ItemStatus};
+use jiff::Timestamp;
 use rand::{prelude::*, rng};
 use regex::Regex;
 use std::{sync::Arc, time::Duration};
@@ -145,8 +145,8 @@ async fn get_items(
     config: &Config,
     conn: &mut DbConn,
     parsed_feed: &ParsedFeed,
-    now: DateTime<Utc>,
-) -> ah::Result<(Vec<FilteredItem>, DateTime<Utc>)> {
+    now: Timestamp,
+) -> ah::Result<(Vec<FilteredItem>, Timestamp)> {
     let mut items = Vec::with_capacity(16);
     let mut oldest = now;
     for parsed_entry in &parsed_feed.entries {
@@ -168,9 +168,12 @@ async fn get_items(
             .unwrap_or_default();
 
         let published = if let Some(published) = &parsed_entry.published {
-            *published
+            Timestamp::new(
+                published.timestamp(),
+                published.timestamp_subsec_nanos() as i32,
+            )?
         } else if let Some(updated) = &parsed_entry.updated {
-            *updated
+            Timestamp::new(updated.timestamp(), updated.timestamp_subsec_nanos() as i32)?
         } else {
             now
         };
@@ -234,7 +237,7 @@ async fn refresh_feed(
     config: Arc<Config>,
     db: Arc<Db>,
     mut feed: Feed,
-    next_retrieval: DateTime<Utc>,
+    next_retrieval: Timestamp,
     net_sema: Arc<Semaphore>,
 ) -> ah::Result<()> {
     log::debug!("Refreshing {} ...", feed.title);
@@ -271,7 +274,7 @@ async fn refresh_feed(
         }
     };
 
-    let now = Utc::now();
+    let now = Timestamp::now();
     let mut conn = db.open().await.context("Open database")?;
     let (items, oldest) = get_items(&config, &mut conn, &parsed_feed, now).await?;
 
@@ -301,7 +304,7 @@ async fn refresh_feed(
         }
     }
 
-    let gc_thres = oldest - config.db.gc_age_offset;
+    let gc_thres = oldest.checked_sub(config.db.gc_age_offset)?;
 
     let items: Vec<Item> = items.into_iter().map(|i| i.item).collect();
     conn.update_feed(&feed, &items, Some(gc_thres), increment_update_revision)
@@ -312,8 +315,10 @@ async fn refresh_feed(
 }
 
 pub async fn refresh_feeds(config: Arc<Config>, db: Arc<Db>) -> ah::Result<Duration> {
-    let next_retrieval =
-        Utc::now() + rand_interval(config.db.refresh_interval, config.db.refresh_slack);
+    let next_retrieval = Timestamp::now().checked_add(rand_interval(
+        config.db.refresh_interval,
+        config.db.refresh_slack,
+    ))?;
 
     let feeds_due = db
         .open()
@@ -347,7 +352,7 @@ pub async fn refresh_feeds(config: Arc<Config>, db: Arc<Db>) -> ah::Result<Durat
         .get_next_due_time()
         .await
         .context("Update feed")?;
-    let dur = (next_due - Utc::now()).num_milliseconds().max(0);
+    let dur = next_due.duration_since(Timestamp::now()).as_millis().max(0);
     let sleep_dur = Duration::from_millis(dur.try_into().unwrap());
     let sleep_dur = sleep_dur + Duration::from_secs(1);
 

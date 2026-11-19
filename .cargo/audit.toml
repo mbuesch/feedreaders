@@ -1,0 +1,11 @@
+# -*- coding: utf-8 -*-
+
+[advisories]
+ignore = [
+    # humantime is unmaintained
+    "RUSTSEC-2026-0542",
+    # chrono is unmaintained
+    "RUSTSEC-2026-0543",
+]
+
+# vim: ts=4 sw=4 expandtab

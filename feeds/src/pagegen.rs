@@ -159,7 +159,7 @@ async fn gen_item_list(
         } else {
             format!("{} - ", escape(&item.author, 32))
         };
-        let timestring = item.published.format("%Y-%m-%d %H:%M:%S");
+        let timestring = item.published.strftime("%Y-%m-%d %H:%M:%S");
         let mut new_marker = if item.seen { "" } else { "<b>(NEW)</b> " };
         let mut history = String::new();
         if item_ext.count > 1 {
@@ -215,7 +215,7 @@ async fn gen_item_history_list(
         } else {
             format!("{} - ", escape(&item.author, 32))
         };
-        let timestring = item.retrieved.format("%Y-%m-%d %H:%M:%S");
+        let timestring = item.retrieved.strftime("%Y-%m-%d %H:%M:%S");
 
         ln!(b, r#"  <div class="{classes}">"#)?;
         ln!(b, r#"    <a class="title" href="{link}">{author}{title}</a>"#)?;

@@ -17,7 +17,6 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = [ "std", "help", "usage", "error-context", "derive" ] }
 console-subscriber = { workspace = true }
 env_logger = { workspace = true }
@@ -25,6 +24,7 @@ feed-rs = { workspace = true }
 feedscfg = { workspace = true }
 feedsdb = { workspace = true }
 itertools = { workspace = true }
+jiff = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
