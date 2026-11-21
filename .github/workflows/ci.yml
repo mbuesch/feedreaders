@@ -22,20 +22,22 @@ jobs:
             version: ubuntu-latest
     runs-on: ${{ matrix.os.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Cache Rust
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.rustup
           key: rustup-${{ runner.os.version }}-${{ matrix.toolchain.version }}
       - name: Cache Cargo
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cargo
           key: cargo-${{ runner.os.version }}-${{ matrix.toolchain.version }}
 
-      - run: sudo apt install libsqlite3-dev
+      - run: |
+          sudo apt-get update
+          sudo apt-get install libsqlite3-dev
       - run: rustup update ${{ matrix.toolchain.version }}
       - run: rustup default ${{ matrix.toolchain.version }}
       - run: rustup component add clippy
