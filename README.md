@@ -1,6 +1,6 @@
 # feedreader
 
-Feedreader/rs is a Rust re-implementation of the original [feedreader](https://github.com/mlochen/feedreader) Python implementation.
+Feedreader/rs is a Rust re-implementation of the original [feedreader](https://github.com/mbuesch/feedreader) Python implementation.
 
 The database format is almost fully compatible with the original.
 Re-using an existing database is possible.
