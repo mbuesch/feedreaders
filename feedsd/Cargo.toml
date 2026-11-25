@@ -17,18 +17,18 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
+atom_syndication = { workspace = true }
 clap = { workspace = true, features = [ "std", "help", "usage", "error-context", "derive" ] }
 console-subscriber = { workspace = true }
 env_logger = { workspace = true }
-feed-rs = { workspace = true }
 feedscfg = { workspace = true }
 feedsdb = { workspace = true }
-itertools = { workspace = true }
 jiff = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = [ "http2", "rustls-no-provider", "gzip", "brotli", "zstd", "deflate" ] }
+rss = { workspace = true }
 rustls = { workspace = true, features = [ "std", "ring" ] }
 sd-notify = { workspace = true }
 tokio = { workspace = true, features = [ "rt-multi-thread", "macros", "signal", "sync" ] }

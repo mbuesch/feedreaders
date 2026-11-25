@@ -18,8 +18,8 @@
 //
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use crate::feedparse::{self, Feed as ParsedFeed};
 use anyhow::{self as ah, Context as _, format_err as err};
-use feed_rs::model::Feed as ParsedFeed;
 use feedscfg::Config;
 use feedsdb::{Db, DbConn, Feed, Item, ItemStatus};
 use jiff::Timestamp;
@@ -45,7 +45,6 @@ enum FeedResult {
 }
 
 async fn get_feed(config: &Config, href: &str) -> ah::Result<FeedResult> {
-    use feed_rs::parser;
     use reqwest::{Client, StatusCode};
 
     let user_agent = concat!(
@@ -87,8 +86,7 @@ async fn get_feed(config: &Config, href: &str) -> ah::Result<FeedResult> {
     let feed_bytes = feed_resp.bytes().await.context("Retrieve feed")?;
 
     let feed = task::spawn_blocking(move || -> ah::Result<Box<ParsedFeed>> {
-        let parser = parser::Builder::new().build();
-        Ok(parser.parse(&*feed_bytes).map(Box::new)?)
+        feedparse::parse(&feed_bytes).map(Box::new)
     })
     .await?;
 
@@ -151,53 +149,19 @@ async fn get_items(
     let mut oldest = now;
     for parsed_entry in &parsed_feed.entries {
         let feed_item_id = parsed_entry.id.clone();
-
-        let author = itertools::join(
-            parsed_entry.authors.iter().filter_map(|a| a.name.clone()),
-            ", ",
-        );
-
-        let title = parsed_entry
-            .title
-            .as_ref()
-            .map(|t| t.content.clone())
-            .unwrap_or_default();
-
-        let link = parsed_entry
-            .links
-            .iter()
-            .map(|l| l.href.clone())
-            .next()
-            .unwrap_or_default();
-
-        let published = if let Some(published) = &parsed_entry.published {
-            Timestamp::new(
-                published.timestamp(),
-                published.timestamp_subsec_nanos() as i32,
-            )?
-        } else if let Some(updated) = &parsed_entry.updated {
-            Timestamp::new(updated.timestamp(), updated.timestamp_subsec_nanos() as i32)?
-        } else {
-            now
-        };
+        let author = parsed_entry.author.clone();
+        let title = parsed_entry.title.clone().unwrap_or_default();
+        let link = parsed_entry.link.clone();
+        let published = parsed_entry
+            .published
+            .or(parsed_entry.updated)
+            .unwrap_or(now);
 
         if published < oldest {
             oldest = published;
         }
 
-        let mut summary = parsed_entry
-            .summary
-            .as_ref()
-            .map(|s| s.content.clone())
-            .unwrap_or_default();
-        if summary.trim().is_empty() {
-            for media in &parsed_entry.media {
-                if let Some(description) = &media.description {
-                    summary = description.content.clone();
-                    break;
-                }
-            }
-        }
+        let summary = parsed_entry.summary.clone().unwrap_or_default();
 
         let mut item = Item {
             item_id: None,
@@ -287,7 +251,7 @@ async fn refresh_feed(
         .sum();
 
     if let Some(title) = parsed_feed.title.as_ref() {
-        feed.title = title.content.clone();
+        feed.title = title.clone();
     }
     feed.last_retrieval = now;
     feed.next_retrieval = next_retrieval;

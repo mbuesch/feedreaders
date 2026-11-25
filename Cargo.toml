@@ -24,13 +24,12 @@ keywords = [ "feed-reader", "rss", "atom" ]
 
 [workspace.dependencies]
 anyhow = "1"
+atom_syndication = { version = "0.12", default-features = false }
 clap = { version = "4", default-features = false }
 console-subscriber = "0.5"
 env_logger = "0.11"
-feed-rs = "3"
 hex = "0.4"
 html-escape = "0.3"
-itertools = "0.15"
 jiff = "1"
 log = "0.4"
 multer = "3"
@@ -39,6 +38,7 @@ querystrong = "0.4"
 rand = "0.10"
 regex = "1"
 reqwest = { version = "0.13", default-features = false }
+rss = { version = "2", default-features = false }
 rusqlite = "0.43"
 rustls = { version = "0.23", default-features = false }
 sd-notify = "0.5"
@@ -48,9 +48,6 @@ toml = "1"
 
 feedscfg = { version = "1", path = "./feedscfg" }
 feedsdb = { version = "1", path = "./feedsdb" }
-
-[patch.crates-io]
-feed-rs = { git = "https://github.com/mbuesch/feed-rs.git", branch = "empty-desc" }
 
 [profile.dev]
 debug = "limited"

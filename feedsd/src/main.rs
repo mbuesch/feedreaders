@@ -19,6 +19,7 @@
 
 #![forbid(unsafe_code)]
 
+mod feedparse;
 mod refresh;
 mod systemd;
 
