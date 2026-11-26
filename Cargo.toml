@@ -54,12 +54,9 @@ debug = "limited"
 panic = "abort"
 
 [profile.release]
-opt-level = 3
 lto = "fat"
 panic = "abort"
 strip = "symbols"
-debug-assertions = false
 overflow-checks = true
-codegen-units = 1
 
 # vim: ts=4 sw=4 expandtab
