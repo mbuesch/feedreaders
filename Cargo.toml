@@ -49,9 +49,6 @@ toml = "1"
 feedscfg = { version = "1", path = "./feedscfg" }
 feedsdb = { version = "1", path = "./feedsdb" }
 
-[patch.crates-io]
-feed-rs = { git = "https://github.com/mbuesch/feed-rs.git", branch = "empty-desc" }
-
 [profile.dev]
 debug = "limited"
 panic = "abort"

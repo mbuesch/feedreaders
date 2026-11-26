@@ -171,12 +171,9 @@ async fn get_items(
             .unwrap_or_default();
 
         let published = if let Some(published) = &parsed_entry.published {
-            Timestamp::new(
-                published.timestamp(),
-                published.timestamp_subsec_nanos() as i32,
-            )?
+            published.timestamp()
         } else if let Some(updated) = &parsed_entry.updated {
-            Timestamp::new(updated.timestamp(), updated.timestamp_subsec_nanos() as i32)?
+            updated.timestamp()
         } else {
             now
         };
